@@ -20,6 +20,13 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<Employee> Employees =>
         Set<Employee>();
 
+        public DbSet<AttendanceEvent> AttendanceEvents =>
+        Set<AttendanceEvent>();
+
+    public DbSet<BiometricVerificationSession>
+        BiometricVerificationSessions =>
+            Set<BiometricVerificationSession>();
+
     protected override void OnModelCreating(
         ModelBuilder modelBuilder)
     {
@@ -28,4 +35,5 @@ public sealed class ApplicationDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(ApplicationDbContext).Assembly);
     }
+    
 }
