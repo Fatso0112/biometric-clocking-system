@@ -1,6 +1,8 @@
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using ClockingManagement.Application.Biometrics;
+using ClockingManagement.Infrastructure.Biometrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +26,14 @@ builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>(
         name: "postgresql-database");
+
+builder.Services.AddScoped<
+    IBiometricVerificationService,
+    MockBiometricVerificationService>();
+
+builder.Services.AddSingleton<
+    IVerificationTokenService,
+    VerificationTokenService>();
 
 var app = builder.Build();
 

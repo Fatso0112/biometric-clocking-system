@@ -28,4 +28,11 @@ public sealed class Employee
         DateTimeOffset.UtcNow;
 
     public DateTimeOffset? UpdatedAtUtc { get; set; }
+
+    public ICollection<AttendanceEvent> AttendanceEvents { get; set; } =
+        new List<AttendanceEvent>();
+
+    public ICollection<BiometricVerificationSession>
+        BiometricVerificationSessions { get; set; } =
+            new List<BiometricVerificationSession>();
 }
