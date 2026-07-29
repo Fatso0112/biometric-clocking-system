@@ -72,6 +72,12 @@ public sealed class WorkLocationConfiguration
             .HasDefaultValue(100)
             .IsRequired();
 
+        builder.Property(location => location.TimeZoneId)
+            .HasColumnName("time_zone_id")
+            .HasMaxLength(100)
+            .HasDefaultValue("Africa/Johannesburg")
+            .IsRequired();
+
         builder.ToTable(
             table =>
             {
