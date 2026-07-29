@@ -54,6 +54,24 @@ public sealed class WorkLocationConfiguration
             .IsUnique()
             .HasDatabaseName("ux_work_locations_name");
 
+        builder.Property(location => location.RequireIpMatch)
+            .HasColumnName("require_ip_match")
+            .HasDefaultValue(true)
+            .IsRequired();
+
+        builder.Property(location => location.RequireGeofence)
+            .HasColumnName("require_geofence")
+            .HasDefaultValue(true)
+            .IsRequired();
+
+        builder.Property(
+                location =>
+                    location.MaximumLocationAccuracyMetres)
+            .HasColumnName(
+                "maximum_location_accuracy_metres")
+            .HasDefaultValue(100)
+            .IsRequired();
+
         builder.ToTable(
             table =>
             {
@@ -70,6 +88,10 @@ public sealed class WorkLocationConfiguration
                     "ck_work_locations_longitude",
                     "longitude IS NULL OR " +
                     "(longitude >= -180 AND longitude <= 180)");
+
+                table.HasCheckConstraint(
+                    "ck_work_locations_accuracy_positive",
+                    "maximum_location_accuracy_metres > 0");
             });
     }
 }

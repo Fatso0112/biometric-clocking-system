@@ -19,6 +19,27 @@ public sealed class AttendanceEventConfiguration
                     "biometric_confidence IS NULL OR " +
                     "(biometric_confidence >= 0 AND " +
                     "biometric_confidence <= 100)");
+
+                table.HasCheckConstraint(
+                    "ck_attendance_events_latitude",
+                    "latitude IS NULL OR " +
+                    "(latitude >= -90 AND latitude <= 90)");
+
+                table.HasCheckConstraint(
+                    "ck_attendance_events_longitude",
+                    "longitude IS NULL OR " +
+                    "(longitude >= -180 AND longitude <= 180)");
+
+                table.HasCheckConstraint(
+                    "ck_attendance_events_location_accuracy",
+                    "location_accuracy_metres IS NULL OR " +
+                    "location_accuracy_metres >= 0");
+
+                table.HasCheckConstraint(
+                    "ck_attendance_events_distance",
+                    "distance_from_work_location_metres " +
+                    "IS NULL OR " +
+                    "distance_from_work_location_metres >= 0");
             });
 
         builder.HasKey(attendanceEvent => attendanceEvent.Id);
@@ -108,5 +129,45 @@ public sealed class AttendanceEventConfiguration
             .HasForeignKey(attendanceEvent =>
                 attendanceEvent.BiometricVerificationSessionId)
             .OnDelete(DeleteBehavior.Restrict);
-    }
+
+        builder.Property(attendanceEvent => attendanceEvent.IpAddress)
+            .HasColumnName("ip_address")
+            .HasMaxLength(45);
+
+        builder.Property(
+                attendanceEvent =>
+                    attendanceEvent.IsAllowedNetwork)
+            .HasColumnName("is_allowed_network");
+
+        builder.Property(attendanceEvent => attendanceEvent.Latitude)
+            .HasColumnName("latitude")
+            .HasPrecision(9, 6);
+
+        builder.Property(attendanceEvent => attendanceEvent.Longitude)
+            .HasColumnName("longitude")
+            .HasPrecision(9, 6);
+
+        builder.Property(
+                attendanceEvent =>
+                    attendanceEvent.LocationAccuracyMetres)
+            .HasColumnName("location_accuracy_metres")
+            .HasPrecision(8, 2);
+
+        builder.Property(
+                attendanceEvent =>
+                    attendanceEvent.LocationCapturedAtUtc)
+            .HasColumnName("location_captured_at_utc");
+
+        builder.Property(
+                attendanceEvent =>
+                    attendanceEvent.DistanceFromWorkLocationMetres)
+            .HasColumnName(
+                "distance_from_work_location_metres")
+            .HasPrecision(10, 2);
+
+        builder.Property(
+                attendanceEvent =>
+                    attendanceEvent.IsInsideGeofence)
+            .HasColumnName("is_inside_geofence");
+            }
 }
