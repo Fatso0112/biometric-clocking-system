@@ -49,6 +49,26 @@ public sealed record AttendanceDashboardResponse(
     int RegisteredEmployees,
     int CurrentlyWorking,
     int OnBreak,
+    int Completed,
     int NotPresent,
+    int MissingClockOut,
+    DateTimeOffset GeneratedAtUtc,
     IReadOnlyCollection<
-        AttendanceEventResponse> RecentActivity);
+    AttendanceEventResponse> RecentActivity);
+
+public sealed record TodayAttendanceSummaryResponse(
+    Guid EmployeeId,
+    string EmployeeNumber,
+    string EmployeeName,
+    DateOnly WorkDate,
+    string TimeZoneId,
+    string Status,
+    DateTimeOffset? ClockInAtUtc,
+    DateTimeOffset? BreakStartedAtUtc,
+    DateTimeOffset? BreakEndedAtUtc,
+    DateTimeOffset? ClockOutAtUtc,
+    int LunchDurationMinutes,
+    int WorkedDurationMinutes,
+    bool HasOpenBreak,
+    bool HasMissingClockOut,
+    bool HasInvalidSequence);

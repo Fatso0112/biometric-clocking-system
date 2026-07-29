@@ -6,6 +6,7 @@ using ClockingManagement.Domain.Enums;
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ClockingManagement.Application.WorkLocations;
 
 namespace ClockingManagement.Api.Controllers;
 
@@ -23,18 +24,32 @@ public sealed class AttendanceController
     private readonly IClockingLocationValidator
         _locationValidator;
 
+    private readonly IWorkdayTimeService
+    _workdayTimeService;
+
+    private readonly IAttendanceSessionCalculator
+    _attendanceSessionCalculator;
+
     public AttendanceController(
         ApplicationDbContext dbContext,
         IVerificationTokenService
             verificationTokenService,
         IClockingLocationValidator
-            locationValidator)
+            locationValidator,
+        IWorkdayTimeService
+            workdayTimeService,
+        IAttendanceSessionCalculator
+            attendanceSessionCalculator)
     {
         _dbContext = dbContext;
         _verificationTokenService =
             verificationTokenService;
         _locationValidator =
             locationValidator;
+        _workdayTimeService =
+            workdayTimeService;
+        _attendanceSessionCalculator =
+            attendanceSessionCalculator;
     }
 
     [HttpPost("clock-in")]
@@ -199,76 +214,369 @@ public sealed class AttendanceController
             items.Select(ToResponse).ToList());
     }
 
+    [HttpGet("today/{employeeId:guid}")]
+    [ProducesResponseType(
+        typeof(TodayAttendanceSummaryResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<
+        TodayAttendanceSummaryResponse>>
+        GetTodayAttendance(
+            Guid employeeId,
+            CancellationToken cancellationToken)
+    {
+        var employee =
+            await _dbContext.Employees
+                .AsNoTracking()
+                .Include(item =>
+                    item.WorkLocation)
+                .SingleOrDefaultAsync(
+                    item =>
+                        item.Id == employeeId,
+                    cancellationToken);
+
+        if (employee is null)
+        {
+            return NotFound(new
+            {
+                message =
+                    "Employee was not found."
+            });
+        }
+
+        var currentUtc =
+            DateTimeOffset.UtcNow;
+
+        var currentWorkday =
+            _workdayTimeService
+                .GetCurrentWorkday(
+                    employee.WorkLocation.TimeZoneId,
+                    currentUtc);
+
+        var previousWorkday =
+            _workdayTimeService.GetWorkday(
+                employee.WorkLocation.TimeZoneId,
+                currentWorkday.LocalDate.AddDays(-1));
+
+        var attendanceEvents =
+            await _dbContext.AttendanceEvents
+                .AsNoTracking()
+                .Where(attendanceEvent =>
+                    attendanceEvent.EmployeeId ==
+                        employee.Id &&
+                    attendanceEvent.CapturedAtUtc >=
+                        previousWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        currentWorkday.EndUtc)
+                .OrderBy(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenBy(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
+                .ToListAsync(
+                    cancellationToken);
+
+        var todayEvents =
+            attendanceEvents
+                .Where(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc >=
+                        currentWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        currentWorkday.EndUtc)
+                .ToList();
+
+        var previousDayEvents =
+            attendanceEvents
+                .Where(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc >=
+                        previousWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        previousWorkday.EndUtc)
+                .ToList();
+
+        var todayCalculation =
+            _attendanceSessionCalculator.Calculate(
+                todayEvents,
+                currentUtc);
+
+        var previousCalculation =
+            _attendanceSessionCalculator.Calculate(
+                previousDayEvents,
+                previousWorkday.EndUtc);
+
+        var response =
+            new TodayAttendanceSummaryResponse(
+                EmployeeId:
+                    employee.Id,
+                EmployeeNumber:
+                    employee.EmployeeNumber,
+                EmployeeName:
+                    $"{employee.FirstName} {employee.LastName}",
+                WorkDate:
+                    currentWorkday.LocalDate,
+                TimeZoneId:
+                    employee.WorkLocation.TimeZoneId,
+                Status:
+                    todayCalculation.Status,
+                ClockInAtUtc:
+                    todayCalculation.ClockInAtUtc,
+                BreakStartedAtUtc:
+                    todayCalculation.BreakStartedAtUtc,
+                BreakEndedAtUtc:
+                    todayCalculation.BreakEndedAtUtc,
+                ClockOutAtUtc:
+                    todayCalculation.ClockOutAtUtc,
+                LunchDurationMinutes:
+                    todayCalculation.TotalBreakMinutes,
+                WorkedDurationMinutes:
+                    todayCalculation.WorkedMinutes,
+                HasOpenBreak:
+                    todayCalculation.HasOpenBreak,
+                HasMissingClockOut:
+                    previousCalculation.HasOpenSession,
+                HasInvalidSequence:
+                    todayCalculation.HasInvalidSequence);
+
+        return Ok(response);
+    }
+
     [HttpGet("dashboard")]
+    [ProducesResponseType(
+        typeof(AttendanceDashboardResponse),
+        StatusCodes.Status200OK)]
     public async Task<ActionResult<
         AttendanceDashboardResponse>>
         GetDashboard(
             CancellationToken cancellationToken)
     {
-        var registeredEmployees =
-            await _dbContext.Employees
-                .AsNoTracking()
-                .CountAsync(
-                    employee =>
-                        employee.IsActive,
-                    cancellationToken);
+        var currentUtc =
+            DateTimeOffset.UtcNow;
 
-        var currentStatuses =
+        var employees =
             await _dbContext.Employees
                 .AsNoTracking()
+                .Include(employee =>
+                    employee.WorkLocation)
                 .Where(employee =>
                     employee.IsActive)
+                .OrderBy(employee =>
+                    employee.EmployeeNumber)
+                .ToListAsync(
+                    cancellationToken);
+
+        if (employees.Count == 0)
+        {
+            return Ok(
+                new AttendanceDashboardResponse(
+                    RegisteredEmployees: 0,
+                    CurrentlyWorking: 0,
+                    OnBreak: 0,
+                    Completed: 0,
+                    NotPresent: 0,
+                    MissingClockOut: 0,
+                    GeneratedAtUtc: currentUtc,
+                    RecentActivity:
+                        Array.Empty<
+                            AttendanceEventResponse>()));
+        }
+
+        var employeesById =
+            employees.ToDictionary(
+                employee => employee.Id);
+
+        var workdayBoundaries =
+            employees
+                .GroupBy(employee =>
+                    employee.WorkLocationId)
+                .ToDictionary(
+                    group => group.Key,
+                    group =>
+                    {
+                        var workLocation =
+                            group.First().WorkLocation;
+
+                        var current =
+                            _workdayTimeService
+                                .GetCurrentWorkday(
+                                    workLocation.TimeZoneId,
+                                    currentUtc);
+
+                        var previous =
+                            _workdayTimeService
+                                .GetWorkday(
+                                    workLocation.TimeZoneId,
+                                    current.LocalDate
+                                        .AddDays(-1));
+
+                        return new
+                        {
+                            Current = current,
+                            Previous = previous
+                        };
+                    });
+
+        var earliestRequiredUtc =
+            workdayBoundaries.Values
+                .Min(value =>
+                    value.Previous.StartUtc);
+
+        var latestRequiredUtc =
+            workdayBoundaries.Values
+                .Max(value =>
+                    value.Current.EndUtc);
+
+        var employeeIds =
+            employees
                 .Select(employee =>
-                    employee.AttendanceEvents
-                        .OrderByDescending(item =>
-                            item.CapturedAtUtc)
-                        .ThenByDescending(item =>
-                            item.CreatedAtUtc)
-                        .Select(item =>
-                            (AttendanceEventType?)
-                                item.EventType)
-                        .FirstOrDefault())
-                .ToListAsync(cancellationToken);
+                    employee.Id)
+                .ToHashSet();
 
-        var currentlyWorking =
-            currentStatuses.Count(status =>
-                status ==
-                    AttendanceEventType.ClockIn ||
-                status ==
-                    AttendanceEventType.BreakEnd);
-
-        var onBreak =
-            currentStatuses.Count(status =>
-                status ==
-                    AttendanceEventType.BreakStart);
-
-        var recentItems =
+        var attendanceEvents =
             await _dbContext.AttendanceEvents
                 .AsNoTracking()
-                .Include(item =>
-                    item.Employee)
-                .OrderByDescending(item =>
-                    item.CapturedAtUtc)
-                .ThenByDescending(item =>
-                    item.CreatedAtUtc)
+                .Include(attendanceEvent =>
+                    attendanceEvent.Employee)
+                .Where(attendanceEvent =>
+                    employeeIds.Contains(
+                        attendanceEvent.EmployeeId) &&
+                    attendanceEvent.CapturedAtUtc >=
+                        earliestRequiredUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        latestRequiredUtc)
+                .OrderBy(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenBy(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
+                .ToListAsync(
+                    cancellationToken);
+
+        var eventsByEmployee =
+            attendanceEvents
+                .GroupBy(attendanceEvent =>
+                    attendanceEvent.EmployeeId)
+                .ToDictionary(
+                    group => group.Key,
+                    group =>
+                        group.ToList());
+
+        var currentlyWorking = 0;
+        var onBreak = 0;
+        var completed = 0;
+        var notPresent = 0;
+        var missingClockOut = 0;
+
+        foreach (var employee in employees)
+        {
+            var boundaries =
+                workdayBoundaries[
+                    employee.WorkLocationId];
+
+            eventsByEmployee.TryGetValue(
+                employee.Id,
+                out var employeeEvents);
+
+            employeeEvents ??=
+                new List<AttendanceEvent>();
+
+            var currentDayEvents =
+                employeeEvents
+                    .Where(attendanceEvent =>
+                        attendanceEvent.CapturedAtUtc >=
+                            boundaries.Current.StartUtc &&
+                        attendanceEvent.CapturedAtUtc <
+                            boundaries.Current.EndUtc)
+                    .ToList();
+
+            var previousDayEvents =
+                employeeEvents
+                    .Where(attendanceEvent =>
+                        attendanceEvent.CapturedAtUtc >=
+                            boundaries.Previous.StartUtc &&
+                        attendanceEvent.CapturedAtUtc <
+                            boundaries.Previous.EndUtc)
+                    .ToList();
+
+            var currentCalculation =
+                _attendanceSessionCalculator.Calculate(
+                    currentDayEvents,
+                    currentUtc);
+
+            var previousCalculation =
+                _attendanceSessionCalculator.Calculate(
+                    previousDayEvents,
+                    boundaries.Previous.EndUtc);
+
+            switch (currentCalculation.Status)
+            {
+                case "Working":
+                    currentlyWorking++;
+                    break;
+
+                case "OnBreak":
+                    onBreak++;
+                    break;
+
+                case "Completed":
+                    completed++;
+                    break;
+
+                case "NotPresent":
+                case "InvalidSequence":
+                default:
+                    notPresent++;
+                    break;
+            }
+
+            if (previousCalculation.HasOpenSession)
+            {
+                missingClockOut++;
+            }
+        }
+
+        var currentDayActivity =
+            attendanceEvents
+                .Where(attendanceEvent =>
+                {
+                    var employee =
+                        employeesById[
+                            attendanceEvent.EmployeeId];
+
+                    var boundaries =
+                        workdayBoundaries[
+                            employee.WorkLocationId];
+
+                    return
+                        attendanceEvent.CapturedAtUtc >=
+                            boundaries.Current.StartUtc &&
+                        attendanceEvent.CapturedAtUtc <
+                            boundaries.Current.EndUtc;
+                })
+                .OrderByDescending(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenByDescending(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
                 .Take(10)
-                .ToListAsync(cancellationToken);
+                .Select(ToResponse)
+                .ToList();
 
         var response =
             new AttendanceDashboardResponse(
                 RegisteredEmployees:
-                    registeredEmployees,
+                    employees.Count,
                 CurrentlyWorking:
                     currentlyWorking,
-                OnBreak: onBreak,
-                NotPresent:
-                    registeredEmployees -
-                    currentlyWorking -
+                OnBreak:
                     onBreak,
+                Completed:
+                    completed,
+                NotPresent:
+                    notPresent,
+                MissingClockOut:
+                    missingClockOut,
+                GeneratedAtUtc:
+                    currentUtc,
                 RecentActivity:
-                    recentItems
-                        .Select(ToResponse)
-                        .ToList());
+                    currentDayActivity);
 
         return Ok(response);
     }
