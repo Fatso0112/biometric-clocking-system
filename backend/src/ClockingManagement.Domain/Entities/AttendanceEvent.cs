@@ -19,6 +19,22 @@ public sealed class AttendanceEvent
 
     public VerificationMethod VerificationMethod { get; set; }
 
+    public string? IpAddress { get; set; }
+
+    public bool? IsAllowedNetwork { get; set; }
+
+    public decimal? Latitude { get; set; }
+
+    public decimal? Longitude { get; set; }
+
+    public decimal? LocationAccuracyMetres { get; set; }
+
+    public DateTimeOffset? LocationCapturedAtUtc { get; set; }
+
+    public decimal? DistanceFromWorkLocationMetres { get; set; }
+
+    public bool? IsInsideGeofence { get; set; }
+
     public decimal? BiometricConfidence { get; set; }
 
     public Guid ClientEventId { get; set; }

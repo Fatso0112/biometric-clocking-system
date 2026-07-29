@@ -3,5 +3,7 @@ namespace ClockingManagement.Domain.Enums;
 public enum AttendanceEventType
 {
     ClockIn = 1,
-    ClockOut = 2
+    BreakStart = 2,
+    BreakEnd = 3,
+    ClockOut = 4
 }

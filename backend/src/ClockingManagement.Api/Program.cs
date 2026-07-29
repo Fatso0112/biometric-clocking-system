@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using ClockingManagement.Application.Biometrics;
 using ClockingManagement.Infrastructure.Biometrics;
+using ClockingManagement.Application.LocationSecurity;
+using ClockingManagement.Infrastructure.LocationSecurity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +36,14 @@ builder.Services.AddScoped<
 builder.Services.AddSingleton<
     IVerificationTokenService,
     VerificationTokenService>();
+
+builder.Services.AddSingleton<
+    IIpNetworkService,
+    IpNetworkService>();
+
+builder.Services.AddScoped<
+    IClockingLocationValidator,
+    ClockingLocationValidator>();
 
 var app = builder.Build();
 

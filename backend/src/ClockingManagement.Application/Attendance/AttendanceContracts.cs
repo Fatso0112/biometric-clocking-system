@@ -9,7 +9,18 @@ public sealed record ClockAttendanceRequest(
     [StringLength(200, MinimumLength = 20)]
     string VerificationToken,
 
-    Guid ClientEventId);
+    Guid ClientEventId,
+
+    [Range(-90, 90)]
+    decimal Latitude,
+
+    [Range(-180, 180)]
+    decimal Longitude,
+
+    [Range(0.1, 10_000)]
+    decimal LocationAccuracyMetres,
+
+    DateTimeOffset LocationCapturedAtUtc);
 
 public sealed record AttendanceEventResponse(
     Guid Id,
@@ -19,6 +30,10 @@ public sealed record AttendanceEventResponse(
     string EventType,
     string VerificationMethod,
     decimal? BiometricConfidence,
+    string? IpAddress,
+    bool? IsAllowedNetwork,
+    decimal? DistanceFromWorkLocationMetres,
+    bool? IsInsideGeofence,
     DateTimeOffset CapturedAtUtc,
     string Message);
 
@@ -32,7 +47,8 @@ public sealed record CurrentAttendanceStatusResponse(
 
 public sealed record AttendanceDashboardResponse(
     int RegisteredEmployees,
-    int CurrentlyPresent,
+    int CurrentlyWorking,
+    int OnBreak,
     int NotPresent,
-    IReadOnlyCollection<AttendanceEventResponse>
-        RecentActivity);
+    IReadOnlyCollection<
+        AttendanceEventResponse> RecentActivity);
