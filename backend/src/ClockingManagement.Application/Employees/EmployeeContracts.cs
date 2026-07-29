@@ -41,3 +41,15 @@ public sealed record EmployeeResponse(
     string WorkLocationName,
     bool IsActive,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record EmployeeLookupResponse(
+    Guid Id,
+    string EmployeeNumber,
+    string FirstName,
+    string LastName,
+    string FullName,
+    Guid DepartmentId,
+    string DepartmentName,
+    Guid WorkLocationId,
+    string WorkLocationName,
+    bool IsActive);
