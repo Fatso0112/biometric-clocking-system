@@ -1,3 +1,5 @@
+using ClockingManagement.Application.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.Employees;
 using ClockingManagement.Domain.Entities;
 using ClockingManagement.Infrastructure.Persistence;
@@ -8,6 +10,7 @@ namespace ClockingManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/employees")]
+[Authorize]
 public sealed class EmployeesController : ControllerBase
 {
     private readonly ApplicationDbContext _dbContext;
@@ -19,6 +22,7 @@ public sealed class EmployeesController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.ViewEmployees)]
     [ProducesResponseType(
         typeof(IReadOnlyCollection<EmployeeResponse>),
         StatusCodes.Status200OK)]
@@ -51,6 +55,7 @@ public sealed class EmployeesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ViewEmployees)]
     [ProducesResponseType(
         typeof(EmployeeResponse),
         StatusCodes.Status200OK)]
@@ -90,6 +95,7 @@ public sealed class EmployeesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.ManageEmployees)]
     [ProducesResponseType(
         typeof(EmployeeResponse),
         StatusCodes.Status201Created)]
@@ -227,6 +233,7 @@ public sealed class EmployeesController : ControllerBase
     }
 
     [HttpGet("by-number/{employeeNumber}")]
+    [Authorize(Policy = AuthorizationPolicies.ViewEmployees)]
     public async Task<ActionResult<EmployeeLookupResponse>>
         GetByEmployeeNumber(
             string employeeNumber,

@@ -1,3 +1,5 @@
+using ClockingManagement.Application.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.LocationSecurity;
 using ClockingManagement.Application.WorkLocations;
 using ClockingManagement.Domain.Entities;
@@ -10,6 +12,7 @@ namespace ClockingManagement.Api.Controllers;
 [ApiController]
 [Route(
     "api/v1/work-locations/{workLocationId:guid}/allowed-networks")]
+[Authorize(Policy = AuthorizationPolicies.ManageWorkLocations)]
 public sealed class WorkLocationNetworksController
     : ControllerBase
 {

@@ -35,4 +35,15 @@ public sealed class Employee
     public ICollection<BiometricVerificationSession>
         BiometricVerificationSessions { get; set; } =
             new List<BiometricVerificationSession>();
+
+    public BiometricProfile? BiometricProfile
+    { get; set; }
+
+    public ICollection<BiometricRegistrationRequest>
+        BiometricRegistrationRequests { get; set; } =
+            new List<BiometricRegistrationRequest>();
+
+    public ICollection<BiometricRecognitionAttempt>
+        BiometricRecognitionAttempts { get; set; } =
+            new List<BiometricRecognitionAttempt>();
 }

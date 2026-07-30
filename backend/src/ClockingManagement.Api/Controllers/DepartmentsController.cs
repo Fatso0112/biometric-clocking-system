@@ -1,3 +1,5 @@
+using ClockingManagement.Application.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.Departments;
 using ClockingManagement.Domain.Entities;
 using ClockingManagement.Infrastructure.Persistence;
@@ -8,6 +10,7 @@ namespace ClockingManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/departments")]
+[Authorize]
 public sealed class DepartmentsController : ControllerBase
 {
     private readonly ApplicationDbContext _dbContext;
@@ -19,6 +22,7 @@ public sealed class DepartmentsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.ViewEmployees)]
     [ProducesResponseType(
         typeof(IReadOnlyCollection<DepartmentResponse>),
         StatusCodes.Status200OK)]
@@ -41,6 +45,7 @@ public sealed class DepartmentsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ViewEmployees)]
     [ProducesResponseType(
         typeof(DepartmentResponse),
         StatusCodes.Status200OK)]
@@ -72,6 +77,7 @@ public sealed class DepartmentsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.ManageEmployees)]
     [ProducesResponseType(
         typeof(DepartmentResponse),
         StatusCodes.Status201Created)]

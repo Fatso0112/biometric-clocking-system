@@ -1,9 +1,16 @@
 using ClockingManagement.Domain.Entities;
+using ClockingManagement.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClockingManagement.Infrastructure.Persistence;
 
-public sealed class ApplicationDbContext : DbContext
+public sealed class ApplicationDbContext
+    : IdentityDbContext<
+        ApplicationUser,
+        IdentityRole<Guid>,
+        Guid>
 {
     public ApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options)
@@ -31,6 +38,25 @@ public sealed class ApplicationDbContext : DbContext
         WorkLocationAllowedNetworks =>
             Set<WorkLocationAllowedNetwork>();
 
+    public DbSet<RefreshToken> RefreshTokens =>
+        Set<RefreshToken>();
+
+    public DbSet<BiometricProfile>
+        BiometricProfiles =>
+            Set<BiometricProfile>();
+
+    public DbSet<BiometricEnrolment>
+        BiometricEnrolments =>
+            Set<BiometricEnrolment>();
+
+    public DbSet<BiometricRegistrationRequest>
+        BiometricRegistrationRequests =>
+            Set<BiometricRegistrationRequest>();
+
+    public DbSet<BiometricRecognitionAttempt>
+        BiometricRecognitionAttempts =>
+            Set<BiometricRecognitionAttempt>();
+
     protected override void OnModelCreating(
         ModelBuilder modelBuilder)
     {
@@ -39,7 +65,4 @@ public sealed class ApplicationDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(ApplicationDbContext).Assembly);
     }
-
-
-    
 }

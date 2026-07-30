@@ -3,6 +3,7 @@ using System;
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClockingManagement.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260730080055_AddIdentityAndRoles")]
+    partial class AddIdentityAndRoles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -134,244 +137,6 @@ namespace ClockingManagement.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_attendance_events_longitude", "longitude IS NULL OR (longitude >= -180 AND longitude <= 180)");
                         });
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricEnrolment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("BiometricProfileId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("biometric_profile_id");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by_user_id");
-
-                    b.Property<DateTimeOffset?>("DisabledAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("disabled_at_utc");
-
-                    b.Property<DateTimeOffset>("EnrolledAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("enrolled_at_utc");
-
-                    b.Property<string>("ExternalReference")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("external_reference");
-
-                    b.Property<string>("Label")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("label");
-
-                    b.Property<string>("Modality")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("modality");
-
-                    b.Property<string>("ProviderName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("provider_name");
-
-                    b.Property<decimal?>("QualityScore")
-                        .HasPrecision(5, 4)
-                        .HasColumnType("numeric(5,4)")
-                        .HasColumnName("quality_score");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
-
-                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProviderName", "ExternalReference")
-                        .IsUnique()
-                        .HasDatabaseName("ux_biometric_enrolments_provider_reference");
-
-                    b.HasIndex("BiometricProfileId", "Modality", "Status")
-                        .HasDatabaseName("ix_biometric_enrolments_profile_modality_status");
-
-                    b.ToTable("biometric_enrolments", (string)null);
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricProfile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("employee_id");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmployeeId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_biometric_profiles_employee_id");
-
-                    b.ToTable("biometric_profiles", (string)null);
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricRecognitionAttempt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("AttemptedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("attempted_at_utc");
-
-                    b.Property<Guid?>("BiometricEnrolmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("biometric_enrolment_id");
-
-                    b.Property<decimal?>("Confidence")
-                        .HasPrecision(5, 4)
-                        .HasColumnType("numeric(5,4)")
-                        .HasColumnName("confidence");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("employee_id");
-
-                    b.Property<string>("FailureCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("failure_code");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)")
-                        .HasColumnName("ip_address");
-
-                    b.Property<string>("Modality")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("modality");
-
-                    b.Property<string>("Outcome")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("outcome");
-
-                    b.Property<string>("ProviderName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("provider_name");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BiometricEnrolmentId");
-
-                    b.HasIndex("EmployeeId", "AttemptedAtUtc")
-                        .HasDatabaseName("ix_biometric_recognition_attempts_employee_time");
-
-                    b.ToTable("biometric_recognition_attempts", (string)null);
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricRegistrationRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("employee_id");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("reason");
-
-                    b.Property<DateTimeOffset>("RequestedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("requested_at_utc");
-
-                    b.Property<Guid>("RequestedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("requested_by_user_id");
-
-                    b.Property<string>("RequestedModality")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("requested_modality");
-
-                    b.Property<string>("ReviewNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("review_notes");
-
-                    b.Property<DateTimeOffset?>("ReviewedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at_utc");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewed_by_user_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
-
-                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmployeeId", "Status")
-                        .HasDatabaseName("ix_biometric_registration_requests_employee_status");
-
-                    b.ToTable("biometric_registration_requests", (string)null);
                 });
 
             modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricVerificationSession", b =>
@@ -967,57 +732,6 @@ namespace ClockingManagement.Infrastructure.Persistence.Migrations
                     b.Navigation("Employee");
                 });
 
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricEnrolment", b =>
-                {
-                    b.HasOne("ClockingManagement.Domain.Entities.BiometricProfile", "BiometricProfile")
-                        .WithMany("Enrolments")
-                        .HasForeignKey("BiometricProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("BiometricProfile");
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricProfile", b =>
-                {
-                    b.HasOne("ClockingManagement.Domain.Entities.Employee", "Employee")
-                        .WithOne("BiometricProfile")
-                        .HasForeignKey("ClockingManagement.Domain.Entities.BiometricProfile", "EmployeeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Employee");
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricRecognitionAttempt", b =>
-                {
-                    b.HasOne("ClockingManagement.Domain.Entities.BiometricEnrolment", "BiometricEnrolment")
-                        .WithMany("RecognitionAttempts")
-                        .HasForeignKey("BiometricEnrolmentId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("ClockingManagement.Domain.Entities.Employee", "Employee")
-                        .WithMany("BiometricRecognitionAttempts")
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("BiometricEnrolment");
-
-                    b.Navigation("Employee");
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricRegistrationRequest", b =>
-                {
-                    b.HasOne("ClockingManagement.Domain.Entities.Employee", "Employee")
-                        .WithMany("BiometricRegistrationRequests")
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Employee");
-                });
-
             modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricVerificationSession", b =>
                 {
                     b.HasOne("ClockingManagement.Domain.Entities.Employee", "Employee")
@@ -1131,16 +845,6 @@ namespace ClockingManagement.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricEnrolment", b =>
-                {
-                    b.Navigation("RecognitionAttempts");
-                });
-
-            modelBuilder.Entity("ClockingManagement.Domain.Entities.BiometricProfile", b =>
-                {
-                    b.Navigation("Enrolments");
-                });
-
             modelBuilder.Entity("ClockingManagement.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Employees");
@@ -1149,12 +853,6 @@ namespace ClockingManagement.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ClockingManagement.Domain.Entities.Employee", b =>
                 {
                     b.Navigation("AttendanceEvents");
-
-                    b.Navigation("BiometricProfile");
-
-                    b.Navigation("BiometricRecognitionAttempts");
-
-                    b.Navigation("BiometricRegistrationRequests");
 
                     b.Navigation("BiometricVerificationSessions");
                 });
