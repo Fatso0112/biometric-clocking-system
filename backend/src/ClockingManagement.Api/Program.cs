@@ -412,12 +412,29 @@ builder.Services.AddScoped<
 var app =
     builder.Build();
 
+await using (var migrationScope =
+             app.Services.CreateAsyncScope())
+{
+    var dbContext =
+        migrationScope.ServiceProvider
+            .GetRequiredService<
+                ApplicationDbContext>();
+
+    await dbContext.Database
+        .MigrateAsync();
+}
+
 await IdentityDataSeeder.SeedAsync(
     app.Services,
     app.Configuration,
     app.Environment);
 
-if (app.Environment.IsDevelopment())
+var swaggerEnabled =
+    app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>(
+        "Swagger:Enabled");
+
+if (swaggerEnabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI();

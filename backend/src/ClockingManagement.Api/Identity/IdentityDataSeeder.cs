@@ -41,7 +41,12 @@ public static class IdentityDataSeeder
                 $"creating role '{roleName}'");
         }
 
-        if (!environment.IsDevelopment())
+        var administratorSeedingEnabled =
+            environment.IsDevelopment() ||
+            configuration.GetValue<bool>(
+                "SeedAdmin:Enabled");
+
+        if (!administratorSeedingEnabled)
         {
             return;
         }
