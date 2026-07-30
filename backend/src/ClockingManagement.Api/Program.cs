@@ -397,6 +397,18 @@ builder.Services.AddSingleton<
     IAuthenticationTokenService,
     JwtAuthenticationTokenService>();
 
+builder.Services.AddSingleton<
+    IFaceRecognitionProvider,
+    MockFaceRecognitionProvider>();
+
+builder.Services.AddSingleton<
+    IFingerprintRecognitionProvider,
+    MockFingerprintRecognitionProvider>();
+
+builder.Services.AddScoped<
+    IBiometricEnrolmentService,
+    BiometricEnrolmentService>();
+
 var app =
     builder.Build();
 

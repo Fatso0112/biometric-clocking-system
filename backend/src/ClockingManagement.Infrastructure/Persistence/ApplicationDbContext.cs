@@ -41,6 +41,22 @@ public sealed class ApplicationDbContext
     public DbSet<RefreshToken> RefreshTokens =>
         Set<RefreshToken>();
 
+    public DbSet<BiometricProfile>
+        BiometricProfiles =>
+            Set<BiometricProfile>();
+
+    public DbSet<BiometricEnrolment>
+        BiometricEnrolments =>
+            Set<BiometricEnrolment>();
+
+    public DbSet<BiometricRegistrationRequest>
+        BiometricRegistrationRequests =>
+            Set<BiometricRegistrationRequest>();
+
+    public DbSet<BiometricRecognitionAttempt>
+        BiometricRecognitionAttempts =>
+            Set<BiometricRecognitionAttempt>();
+
     protected override void OnModelCreating(
         ModelBuilder modelBuilder)
     {
