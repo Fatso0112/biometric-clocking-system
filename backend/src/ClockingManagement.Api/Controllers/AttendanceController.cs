@@ -1,12 +1,12 @@
 using ClockingManagement.Application.Attendance;
 using ClockingManagement.Application.Biometrics;
 using ClockingManagement.Application.LocationSecurity;
+using ClockingManagement.Application.WorkLocations;
 using ClockingManagement.Domain.Entities;
 using ClockingManagement.Domain.Enums;
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ClockingManagement.Application.WorkLocations;
 
 namespace ClockingManagement.Api.Controllers;
 
@@ -25,10 +25,10 @@ public sealed class AttendanceController
         _locationValidator;
 
     private readonly IWorkdayTimeService
-    _workdayTimeService;
+        _workdayTimeService;
 
     private readonly IAttendanceSessionCalculator
-    _attendanceSessionCalculator;
+        _attendanceSessionCalculator;
 
     public AttendanceController(
         ApplicationDbContext dbContext,
@@ -138,6 +138,8 @@ public sealed class AttendanceController
         var employee =
             await _dbContext.Employees
                 .AsNoTracking()
+                .Include(item =>
+                    item.WorkLocation)
                 .SingleOrDefaultAsync(
                     item =>
                         item.Id == employeeId,
@@ -152,26 +154,56 @@ public sealed class AttendanceController
             });
         }
 
-        var latestEvent =
+        var currentUtc =
+            DateTimeOffset.UtcNow;
+
+        var currentWorkday =
+            _workdayTimeService
+                .GetCurrentWorkday(
+                    employee.WorkLocation.TimeZoneId,
+                    currentUtc);
+
+        var todayEvents =
             await _dbContext.AttendanceEvents
                 .AsNoTracking()
-                .Where(item =>
-                    item.EmployeeId ==
-                    employeeId)
-                .OrderByDescending(item =>
-                    item.CapturedAtUtc)
-                .ThenByDescending(item =>
-                    item.CreatedAtUtc)
-                .FirstOrDefaultAsync(
+                .Where(attendanceEvent =>
+                    attendanceEvent.EmployeeId ==
+                        employee.Id &&
+                    attendanceEvent.CapturedAtUtc >=
+                        currentWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        currentWorkday.EndUtc)
+                .OrderBy(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenBy(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
+                .ToListAsync(
                     cancellationToken);
+
+        var calculation =
+            _attendanceSessionCalculator.Calculate(
+                todayEvents,
+                currentUtc);
+
+        var latestEvent =
+            todayEvents
+                .OrderByDescending(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenByDescending(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
+                .FirstOrDefault();
+
+        var currentStatus =
+            calculation.Status == "Completed"
+                ? "NotPresent"
+                : calculation.Status;
 
         var response =
             new CurrentAttendanceStatusResponse(
                 employee.Id,
                 employee.EmployeeNumber,
                 $"{employee.FirstName} {employee.LastName}",
-                GetCurrentStatus(
-                    latestEvent?.EventType),
+                currentStatus,
                 latestEvent?.EventType.ToString(),
                 latestEvent?.CapturedAtUtc);
 
@@ -737,31 +769,141 @@ public sealed class AttendanceController
                 });
         }
 
-        var latestEvent =
+        var currentWorkday =
+            _workdayTimeService
+                .GetCurrentWorkday(
+                    employee.WorkLocation.TimeZoneId,
+                    now);
+
+        var previousWorkday =
+            _workdayTimeService
+                .GetWorkday(
+                    employee.WorkLocation.TimeZoneId,
+                    currentWorkday.LocalDate.AddDays(-1));
+
+        var relevantAttendanceEvents =
             await _dbContext.AttendanceEvents
                 .AsNoTracking()
-                .Where(item =>
-                    item.EmployeeId ==
-                    employee.Id)
-                .OrderByDescending(item =>
-                    item.CapturedAtUtc)
-                .ThenByDescending(item =>
-                    item.CreatedAtUtc)
-                .FirstOrDefaultAsync(
+                .Where(attendanceEvent =>
+                    attendanceEvent.EmployeeId ==
+                        employee.Id &&
+                    attendanceEvent.CapturedAtUtc >=
+                        previousWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        currentWorkday.EndUtc)
+                .OrderBy(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenBy(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
+                .ToListAsync(
                     cancellationToken);
+
+        var todayEvents =
+            relevantAttendanceEvents
+                .Where(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc >=
+                        currentWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        currentWorkday.EndUtc)
+                .ToList();
+
+        var previousDayEvents =
+            relevantAttendanceEvents
+                .Where(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc >=
+                        previousWorkday.StartUtc &&
+                    attendanceEvent.CapturedAtUtc <
+                        previousWorkday.EndUtc)
+                .ToList();
+
+        var previousDayCalculation =
+            _attendanceSessionCalculator.Calculate(
+                previousDayEvents,
+                previousWorkday.EndUtc);
+
+        if (previousDayCalculation.HasOpenSession &&
+            todayEvents.Count == 0)
+        {
+            return Conflict(new
+            {
+                errorCode =
+                    "MISSING_PREVIOUS_CLOCK_OUT",
+
+                message =
+                    "The previous workday has an open attendance session. Submit an attendance correction before recording a new attendance event.",
+
+                previousWorkDate =
+                    previousWorkday.LocalDate,
+
+                previousStatus =
+                    previousDayCalculation.Status,
+
+                previousClockInAtUtc =
+                    previousDayCalculation.ClockInAtUtc,
+
+                previousBreakStartedAtUtc =
+                    previousDayCalculation.BreakStartedAtUtc
+            });
+        }
+
+        var todayCalculation =
+            _attendanceSessionCalculator.Calculate(
+                todayEvents,
+                now);
+
+        if (todayCalculation.HasInvalidSequence)
+        {
+            return Conflict(new
+            {
+                errorCode =
+                    "CURRENT_DAY_ATTENDANCE_INVALID",
+
+                message =
+                    "The employee's current attendance records contain an invalid event sequence. A supervisor or HR officer must review the records.",
+
+                workDate =
+                    currentWorkday.LocalDate
+            });
+        }
+
+        var latestTodayEvent =
+            todayEvents
+                .OrderByDescending(attendanceEvent =>
+                    attendanceEvent.CapturedAtUtc)
+                .ThenByDescending(attendanceEvent =>
+                    attendanceEvent.CreatedAtUtc)
+                .FirstOrDefault();
 
         var transitionError =
             GetTransitionError(
-                latestEvent?.EventType,
+                latestTodayEvent?.EventType,
                 requestedEvent);
 
         if (transitionError is not null)
         {
             return Conflict(new
             {
-                message = transitionError
+                errorCode =
+                    GetTransitionErrorCode(
+                        requestedEvent,
+                        latestTodayEvent?.EventType),
+
+                message =
+                    transitionError,
+
+                workDate =
+                    currentWorkday.LocalDate,
+
+                currentStatus =
+                    todayCalculation.Status,
+
+                latestEventType =
+                    latestTodayEvent?
+                        .EventType
+                        .ToString()
             });
         }
+
 
         await using var transaction =
             await _dbContext.Database
@@ -778,6 +920,8 @@ public sealed class AttendanceController
                 {
                     EmployeeId =
                         employee.Id,
+                    Employee =
+                        employee,
                     EventType =
                         requestedEvent,
                     BiometricVerificationSessionId =
@@ -900,21 +1044,37 @@ public sealed class AttendanceController
         };
     }
 
-    private static string GetCurrentStatus(
-        AttendanceEventType? eventType)
+    private static string GetTransitionErrorCode(
+        AttendanceEventType requestedEvent,
+        AttendanceEventType? latestEvent)
     {
-        return eventType switch
+        return requestedEvent switch
         {
-            AttendanceEventType.ClockIn =>
-                "Working",
+            AttendanceEventType.ClockIn
+                when latestEvent is not null =>
+                    "ALREADY_CLOCKED_IN",
 
-            AttendanceEventType.BreakEnd =>
-                "Working",
+            AttendanceEventType.BreakStart
+                when latestEvent ==
+                    AttendanceEventType.BreakStart =>
+                    "ALREADY_ON_BREAK",
 
             AttendanceEventType.BreakStart =>
-                "OnBreak",
+                "NOT_CLOCKED_IN",
 
-            _ => "NotPresent"
+            AttendanceEventType.BreakEnd =>
+                "NOT_ON_BREAK",
+
+            AttendanceEventType.ClockOut
+                when latestEvent ==
+                    AttendanceEventType.BreakStart =>
+                    "BREAK_MUST_END_BEFORE_CLOCK_OUT",
+
+            AttendanceEventType.ClockOut =>
+                "NOT_CLOCKED_IN",
+
+            _ =>
+                "INVALID_ATTENDANCE_TRANSITION"
         };
     }
 
