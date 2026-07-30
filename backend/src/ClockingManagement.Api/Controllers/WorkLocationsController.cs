@@ -1,3 +1,5 @@
+using ClockingManagement.Application.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.WorkLocations;
 using ClockingManagement.Domain.Entities;
 using ClockingManagement.Infrastructure.Persistence;
@@ -8,6 +10,7 @@ namespace ClockingManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/work-locations")]
+[Authorize]
 public sealed class WorkLocationsController
     : ControllerBase
 {
@@ -27,6 +30,7 @@ public sealed class WorkLocationsController
     }
 
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.ViewWorkLocations)]
     [ProducesResponseType(
         typeof(IReadOnlyCollection<
             WorkLocationResponse>),
@@ -65,6 +69,7 @@ public sealed class WorkLocationsController
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ViewWorkLocations)]
     [ProducesResponseType(
         typeof(WorkLocationResponse),
         StatusCodes.Status200OK)]
@@ -112,6 +117,7 @@ public sealed class WorkLocationsController
     }
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.ManageWorkLocations)]
     [ProducesResponseType(
         typeof(WorkLocationResponse),
         StatusCodes.Status201Created)]
@@ -214,6 +220,7 @@ public sealed class WorkLocationsController
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManageWorkLocations)]
     [ProducesResponseType(
         typeof(WorkLocationResponse),
         StatusCodes.Status200OK)]

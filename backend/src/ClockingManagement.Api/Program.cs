@@ -327,6 +327,41 @@ builder.Services.AddAuthorization(
                 policy.RequireRole(
                     ApplicationRoles
                         .SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies.ViewEmployees,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.Supervisor,
+                    ApplicationRoles.HROfficer,
+                    ApplicationRoles.SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies.ViewWorkLocations,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.Supervisor,
+                    ApplicationRoles.HROfficer,
+                    ApplicationRoles.SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies.ViewAttendanceHistory,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.Supervisor,
+                    ApplicationRoles.HROfficer,
+                    ApplicationRoles.PayrollOfficer,
+                    ApplicationRoles.SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies.ViewAttendanceDashboard,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.Supervisor,
+                    ApplicationRoles.HROfficer,
+                    ApplicationRoles.PayrollOfficer,
+                    ApplicationRoles.ExecutiveViewer,
+                    ApplicationRoles.SystemAdministrator));
     });
 
 builder.Services

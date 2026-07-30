@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using ClockingManagement.Application.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.Biometrics;
 using ClockingManagement.Domain.Entities;
 using ClockingManagement.Domain.Enums;
@@ -9,6 +12,7 @@ namespace ClockingManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/biometric-verifications")]
+[Authorize(Roles = ApplicationRoles.Employee)]
 public sealed class BiometricVerificationsController
     : ControllerBase
 {
@@ -48,6 +52,23 @@ public sealed class BiometricVerificationsController
         [FromBody] MockBiometricVerificationRequest request,
         CancellationToken cancellationToken)
     {
+        var authenticatedEmployeeId =
+            GetAuthenticatedEmployeeId();
+
+        if (!authenticatedEmployeeId.HasValue)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "EMPLOYEE_ACCOUNT_NOT_LINKED",
+
+                    message =
+                        "The authenticated account is not linked to an employee record."
+                });
+        }
+
         var employeeNumber =
             request.EmployeeNumber.Trim();
 
@@ -65,6 +86,21 @@ public sealed class BiometricVerificationsController
             {
                 message = "Employee was not found."
             });
+        }
+
+        if (employee.Id !=
+            authenticatedEmployeeId.Value)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "EMPLOYEE_ACCESS_FORBIDDEN",
+
+                    message =
+                        "You may request biometric verification only for your linked employee record."
+                });
         }
 
         if (!employee.IsActive)
@@ -146,5 +182,17 @@ public sealed class BiometricVerificationsController
                 verificationResult.Message);
 
         return Ok(response);
+    }
+    private Guid? GetAuthenticatedEmployeeId()
+    {
+        var employeeIdValue =
+            User.FindFirstValue(
+                "employee_id");
+
+        return Guid.TryParse(
+            employeeIdValue,
+            out var employeeId)
+                ? employeeId
+                : null;
     }
 }

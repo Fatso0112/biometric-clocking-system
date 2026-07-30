@@ -61,4 +61,16 @@ public static class AuthorizationPolicies
 
     public const string ManageUserRoles =
         "ManageUserRoles";
+
+    public const string ViewEmployees =
+        "ViewEmployees";
+
+    public const string ViewWorkLocations =
+        "ViewWorkLocations";
+
+    public const string ViewAttendanceHistory =
+        "ViewAttendanceHistory";
+
+    public const string ViewAttendanceDashboard =
+        "ViewAttendanceDashboard";
 }

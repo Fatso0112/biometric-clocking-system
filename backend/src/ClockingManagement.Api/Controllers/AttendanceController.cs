@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using ClockingManagement.Application.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.Attendance;
 using ClockingManagement.Application.Biometrics;
 using ClockingManagement.Application.LocationSecurity;
@@ -12,6 +15,7 @@ namespace ClockingManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/attendance")]
+[Authorize]
 public sealed class AttendanceController
     : ControllerBase
 {
@@ -53,6 +57,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("clock-in")]
+    [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> ClockIn(
         [FromBody] ClockAttendanceRequest request,
@@ -65,6 +70,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("break/start")]
+    [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> StartBreak(
         [FromBody] ClockAttendanceRequest request,
@@ -77,6 +83,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("break/end")]
+    [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> EndBreak(
         [FromBody] ClockAttendanceRequest request,
@@ -89,6 +96,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("clock-out")]
+    [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> ClockOut(
         [FromBody] ClockAttendanceRequest request,
@@ -125,6 +133,21 @@ public sealed class AttendanceController
             });
         }
 
+        if (!CanViewEmployeeAttendance(
+                item.EmployeeId))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "ATTENDANCE_ACCESS_FORBIDDEN",
+
+                    message =
+                        "You do not have permission to view this attendance event."
+                });
+        }
+
         return Ok(ToResponse(item));
     }
 
@@ -135,6 +158,21 @@ public sealed class AttendanceController
             Guid employeeId,
             CancellationToken cancellationToken)
     {
+        if (!CanViewEmployeeAttendance(
+                employeeId))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "ATTENDANCE_ACCESS_FORBIDDEN",
+
+                    message =
+                        "You may view only your own attendance unless your role permits wider access."
+                });
+        }
+
         var employee =
             await _dbContext.Employees
                 .AsNoTracking()
@@ -211,6 +249,7 @@ public sealed class AttendanceController
     }
 
     [HttpGet("history")]
+    [Authorize(Policy = AuthorizationPolicies.ViewAttendanceHistory)]
     public async Task<ActionResult<
         IReadOnlyCollection<
             AttendanceEventResponse>>> GetHistory(
@@ -258,6 +297,21 @@ public sealed class AttendanceController
             Guid employeeId,
             CancellationToken cancellationToken)
     {
+        if (!CanViewEmployeeAttendance(
+                employeeId))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "ATTENDANCE_ACCESS_FORBIDDEN",
+
+                    message =
+                        "You may view only your own attendance unless your role permits wider access."
+                });
+        }
+
         var employee =
             await _dbContext.Employees
                 .AsNoTracking()
@@ -373,6 +427,7 @@ public sealed class AttendanceController
     }
 
     [HttpGet("dashboard")]
+    [Authorize(Policy = AuthorizationPolicies.ViewAttendanceDashboard)]
     [ProducesResponseType(
         typeof(AttendanceDashboardResponse),
         StatusCodes.Status200OK)]
@@ -627,6 +682,38 @@ public sealed class AttendanceController
                 message =
                     "A valid employee ID is required."
             });
+        }
+
+        var authenticatedEmployeeId =
+            GetAuthenticatedEmployeeId();
+
+        if (!authenticatedEmployeeId.HasValue)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "EMPLOYEE_ACCOUNT_NOT_LINKED",
+
+                    message =
+                        "The authenticated account is not linked to an employee record."
+                });
+        }
+
+        if (authenticatedEmployeeId.Value !=
+            request.EmployeeId)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "EMPLOYEE_ACCESS_FORBIDDEN",
+
+                    message =
+                        "You may record attendance only for your linked employee record."
+                });
         }
 
         if (request.ClientEventId ==
@@ -1076,6 +1163,44 @@ public sealed class AttendanceController
             _ =>
                 "INVALID_ATTENDANCE_TRANSITION"
         };
+    }
+
+    private bool CanViewEmployeeAttendance(
+        Guid employeeId)
+    {
+        var authenticatedEmployeeId =
+            GetAuthenticatedEmployeeId();
+
+        if (authenticatedEmployeeId.HasValue &&
+            authenticatedEmployeeId.Value ==
+                employeeId)
+        {
+            return true;
+        }
+
+        return
+            User.IsInRole(
+                ApplicationRoles.Supervisor) ||
+            User.IsInRole(
+                ApplicationRoles.HROfficer) ||
+            User.IsInRole(
+                ApplicationRoles.PayrollOfficer) ||
+            User.IsInRole(
+                ApplicationRoles
+                    .SystemAdministrator);
+    }
+
+    private Guid? GetAuthenticatedEmployeeId()
+    {
+        var employeeIdValue =
+            User.FindFirstValue(
+                "employee_id");
+
+        return Guid.TryParse(
+            employeeIdValue,
+            out var employeeId)
+                ? employeeId
+                : null;
     }
 
     private static AttendanceEventResponse
