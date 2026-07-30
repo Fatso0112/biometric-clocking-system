@@ -17,13 +17,50 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using ClockingManagement.Api.Authentication;
+using Microsoft.OpenApi.Models;
 
 var builder =
     WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+builder.Services.AddSwaggerGen(
+    options =>
+    {
+        options.AddSecurityDefinition(
+            "Bearer",
+            new OpenApiSecurityScheme
+            {
+                Name = "Authorization",
+                Description =
+                    "Enter the JWT access token.",
+                In = ParameterLocation.Header,
+                Type = SecuritySchemeType.Http,
+                Scheme = "Bearer",
+                BearerFormat = "JWT"
+            });
+
+        options.AddSecurityRequirement(
+            new OpenApiSecurityRequirement
+            {
+                {
+                    new OpenApiSecurityScheme
+                    {
+                        Reference =
+                            new OpenApiReference
+                            {
+                                Type =
+                                    ReferenceType
+                                        .SecurityScheme,
+                                Id = "Bearer"
+                            }
+                    },
+                    Array.Empty<string>()
+                }
+            });
+    });
 
 var connectionString =
     builder.Configuration.GetConnectionString(
@@ -257,6 +294,10 @@ builder.Services.AddSingleton<
 builder.Services.AddSingleton<
     IAttendanceSessionCalculator,
     AttendanceSessionCalculator>();
+
+builder.Services.AddSingleton<
+    IAuthenticationTokenService,
+    JwtAuthenticationTokenService>();
 
 var app =
     builder.Build();
