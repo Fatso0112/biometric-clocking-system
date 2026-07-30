@@ -225,4 +225,68 @@ public sealed class EmployeesController : ControllerBase
             new { id = employee.Id },
             response);
     }
+
+    [HttpGet("by-number/{employeeNumber}")]
+    public async Task<ActionResult<EmployeeLookupResponse>>
+        GetByEmployeeNumber(
+            string employeeNumber,
+            CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(employeeNumber))
+        {
+            return BadRequest(new
+            {
+                message =
+                    "An employee number is required."
+            });
+        }
+
+        var normalizedEmployeeNumber =
+            employeeNumber.Trim();
+
+        if (normalizedEmployeeNumber.Length > 50)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "The employee number is too long."
+            });
+        }
+
+        var employee =
+            await _dbContext.Employees
+                .AsNoTracking()
+                .Include(item => item.Department)
+                .Include(item => item.WorkLocation)
+                .SingleOrDefaultAsync(
+                    item =>
+                        EF.Functions.ILike(
+                            item.EmployeeNumber,
+                            normalizedEmployeeNumber),
+                    cancellationToken);
+
+        if (employee is null)
+        {
+            return NotFound(new
+            {
+                message =
+                    $"No employee was found with employee number '{normalizedEmployeeNumber}'."
+            });
+        }
+
+        var response =
+            new EmployeeLookupResponse(
+                employee.Id,
+                employee.EmployeeNumber,
+                employee.FirstName,
+                employee.LastName,
+                $"{employee.FirstName} {employee.LastName}",
+                employee.DepartmentId,
+                employee.Department.Name,
+                employee.WorkLocationId,
+                employee.WorkLocation.Name,
+                employee.IsActive);
+
+        return Ok(response);
+    }
 }

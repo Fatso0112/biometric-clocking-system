@@ -5,6 +5,9 @@ using ClockingManagement.Application.Biometrics;
 using ClockingManagement.Infrastructure.Biometrics;
 using ClockingManagement.Application.LocationSecurity;
 using ClockingManagement.Infrastructure.LocationSecurity;
+using ClockingManagement.Application.WorkLocations;
+using ClockingManagement.Infrastructure.Time;
+using ClockingManagement.Application.Attendance;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,6 +47,14 @@ builder.Services.AddSingleton<
 builder.Services.AddScoped<
     IClockingLocationValidator,
     ClockingLocationValidator>();
+
+builder.Services.AddSingleton<
+    IWorkdayTimeService,
+    SystemWorkdayTimeService>();
+
+builder.Services.AddSingleton<
+    IAttendanceSessionCalculator,
+    AttendanceSessionCalculator>();
 
 var app = builder.Build();
 
