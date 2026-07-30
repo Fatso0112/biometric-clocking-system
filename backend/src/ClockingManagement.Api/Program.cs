@@ -60,6 +60,8 @@ builder.Services.AddSwaggerGen(
                     Array.Empty<string>()
                 }
             });
+        
+        
     });
 
 var connectionString =
@@ -195,6 +197,50 @@ builder.Services
                     RoleClaimType =
                         ClaimTypes.Role
                 };
+
+            options.Events =
+                new JwtBearerEvents
+                {
+                    OnTokenValidated =
+                        async context =>
+                        {
+                            var userIdValue =
+                                context.Principal?
+                                    .FindFirst(
+                                        ClaimTypes
+                                            .NameIdentifier)?
+                                    .Value;
+
+                            if (!Guid.TryParse(
+                                    userIdValue,
+                                    out var userId))
+                            {
+                                context.Fail(
+                                    "The access token does not contain a valid user ID.");
+
+                                return;
+                            }
+
+                            var userManager =
+                                context.HttpContext
+                                    .RequestServices
+                                    .GetRequiredService<
+                                        UserManager<
+                                            ApplicationUser>>();
+
+                            var user =
+                                await userManager
+                                    .FindByIdAsync(
+                                        userId.ToString());
+
+                            if (user is null ||
+                                !user.IsActive)
+                            {
+                                context.Fail(
+                                    "The user account is disabled or no longer exists.");
+                            }
+                        }
+                };
         });
 
 builder.Services.AddAuthorization(
@@ -260,6 +306,23 @@ builder.Services.AddAuthorization(
         options.AddPolicy(
             AuthorizationPolicies
                 .ManageSystemConfiguration,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles
+                        .SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies
+                .ManageUserAccounts,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.HROfficer,
+                    ApplicationRoles
+                        .SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies
+                .ManageUserRoles,
             policy =>
                 policy.RequireRole(
                     ApplicationRoles

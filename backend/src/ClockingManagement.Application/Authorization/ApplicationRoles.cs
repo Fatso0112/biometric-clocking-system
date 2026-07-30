@@ -55,4 +55,10 @@ public static class AuthorizationPolicies
 
     public const string ManageSystemConfiguration =
         "ManageSystemConfiguration";
+
+    public const string ManageUserAccounts =
+        "ManageUserAccounts";
+
+    public const string ManageUserRoles =
+        "ManageUserRoles";
 }
