@@ -1,16 +1,21 @@
 import { CircleHelp, ClipboardList, Clock3, Fingerprint, ScanFace } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Card from '../components/Card';
 import ListItem from '../components/ListItem';
+import NoticeBanner from '../components/NoticeBanner';
 import ScreenHeader from '../components/ScreenHeader';
+import { getNotRegisteredScanType } from '../types/navigation';
 
 export default function NotRegistered() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const scanType = getNotRegisteredScanType(location.state);
+  const scanPath = scanType === 'fingerprint' ? '/scan/fingerprint' : '/scan/face';
 
   return (
     <AppShell>
-      <ScreenHeader title="Not in Database" backTo="/scan/face" />
+      <ScreenHeader title="Not in Database" backTo={scanPath} backState={{ mode: 'verify' }} />
       <div className="flex flex-1 flex-col pt-5">
         <div className="flex flex-col items-center text-center">
           <div className="relative flex h-24 w-24 items-center justify-center">
@@ -35,21 +40,28 @@ export default function NotRegistered() {
               icon={<ScanFace className="h-8 w-8" strokeWidth={1.5} />}
               title="Enter Face"
               subtitle="Capture your face and send to admin"
-              onClick={() => navigate('/scan/face')}
+              onClick={() =>
+                navigate('/scan/face', {
+                  state: { mode: 'enroll', enrollmentSource: 'registration' },
+                })
+              }
             />
             <ListItem
               icon={<Fingerprint className="h-8 w-8" strokeWidth={1.5} />}
               title="Enter Fingerprint"
               subtitle="Capture your fingerprint and send to admin"
-              onClick={() => navigate('/scan/fingerprint')}
+              onClick={() =>
+                navigate('/scan/fingerprint', {
+                  state: { mode: 'enroll', enrollmentSource: 'registration' },
+                })
+              }
             />
           </div>
         </Card>
 
-        <div className="mt-4 flex items-center gap-3 rounded-card bg-light-grey/70 px-4 py-3 text-xs leading-[1.5] text-dark-grey">
-          <Clock3 className="h-5 w-5 shrink-0 text-black" strokeWidth={1.5} aria-hidden="true" />
-          <span>Your request will be reviewed by the admin.</span>
-        </div>
+        <NoticeBanner className="mt-4" icon={<Clock3 className="h-5 w-5" strokeWidth={1.5} />}>
+          Your request will be reviewed by the admin.
+        </NoticeBanner>
       </div>
     </AppShell>
   );

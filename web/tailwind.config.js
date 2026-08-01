@@ -9,6 +9,12 @@ export default {
         black: '#1C1C1C',
         'dark-grey': '#555555',
         'light-grey': '#E8E8EB',
+        'status-green': '#16A34A',
+        'status-green-soft': '#DCFCE7',
+        'status-red': '#E11D48',
+        'status-red-soft': '#FCE7F3',
+        'status-amber': '#D97706',
+        'status-amber-soft': '#FEF3C7',
       },
       fontFamily: {
         poppins: ['Poppins', 'sans-serif'],

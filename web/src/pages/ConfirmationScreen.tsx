@@ -1,10 +1,16 @@
-import { Calendar, Check, Clock3, Sparkles, User } from 'lucide-react';
+import { Calendar, Check, Clock3, Sparkles, Timer, User } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { useSession } from '../context/SessionContext';
+import { useLogout } from '../hooks/useLogout';
+import {
+  recordAttendanceClockIn,
+  recordAttendanceClockOut,
+} from '../services/attendanceApi';
+import { formatElapsedDuration } from '../utils/attendanceDuration';
 
 type ConfirmationVariant = 'clockIn' | 'clockOut';
 
@@ -77,15 +83,18 @@ export default function ConfirmationScreen({ variant }: ConfirmationScreenProps)
     recordClockIn,
     recordClockOut,
     showClockOutGuardMessage,
-    clearSession,
   } = useSession();
+  const logout = useLogout();
   const [occurredAt] = useState(() => new Date());
-  const canClockOutOnEntry = useRef(variant !== 'clockOut' || clockInTime !== null).current;
+  const [hoursWorked, setHoursWorked] = useState<string | null>(null);
+  const clockInTimeOnEntry = useRef(clockInTime).current;
+  const canClockOutOnEntry = variant !== 'clockOut' || clockInTimeOnEntry !== null;
   const content = variantContent[variant];
 
   useEffect(() => {
     if (variant === 'clockIn') {
-      recordClockIn(occurredAt);
+      const recordedClockInTime = recordAttendanceClockIn(staffNumber!, occurredAt);
+      recordClockIn(recordedClockInTime);
       return;
     }
 
@@ -95,9 +104,13 @@ export default function ConfirmationScreen({ variant }: ConfirmationScreenProps)
       return;
     }
 
-    // Keep the entry snapshot valid while clearing the session timestamp so a second clock-out requires a new clock-in.
+    const completedEvent = recordAttendanceClockOut(staffNumber!, clockInTimeOnEntry!, occurredAt);
+    if (completedEvent?.timeIn && completedEvent.timeOut) {
+      setHoursWorked(formatElapsedDuration(completedEvent.timeIn, completedEvent.timeOut));
+    }
+    // Clear only the active shift; the completed attendance event remains persisted independently of logout.
     recordClockOut();
-  }, [canClockOutOnEntry, navigate, occurredAt, recordClockIn, recordClockOut, showClockOutGuardMessage, variant]);
+  }, [canClockOutOnEntry, clockInTimeOnEntry, navigate, occurredAt, recordClockIn, recordClockOut, showClockOutGuardMessage, staffNumber, variant]);
 
   if (variant === 'clockOut' && !canClockOutOnEntry) return null;
 
@@ -107,8 +120,7 @@ export default function ConfirmationScreen({ variant }: ConfirmationScreenProps)
       return;
     }
 
-    clearSession();
-    navigate('/');
+    logout();
   };
 
   return (
@@ -129,7 +141,7 @@ export default function ConfirmationScreen({ variant }: ConfirmationScreenProps)
           <DetailRow
             icon={<User className="h-6 w-6" strokeWidth={1.5} />}
             label="Employee Number"
-            value={staffNumber ?? '10001'}
+            value={staffNumber!}
           />
           <DetailRow
             icon={<Calendar className="h-6 w-6" strokeWidth={1.5} />}
@@ -140,8 +152,16 @@ export default function ConfirmationScreen({ variant }: ConfirmationScreenProps)
             icon={<Clock3 className="h-6 w-6" strokeWidth={1.5} />}
             label="Time"
             value={formatTime(occurredAt)}
-            showDivider={false}
+            showDivider={variant === 'clockOut'}
           />
+          {variant === 'clockOut' ? (
+            <DetailRow
+              icon={<Timer className="h-6 w-6" strokeWidth={1.5} />}
+              label="Hours Worked"
+              value={hoursWorked ?? '—'}
+              showDivider={false}
+            />
+          ) : null}
         </Card>
 
         <Button onClick={handlePrimaryAction} className="mt-6">

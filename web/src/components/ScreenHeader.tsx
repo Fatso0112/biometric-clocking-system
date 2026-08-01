@@ -3,18 +3,15 @@ import { useNavigate } from 'react-router-dom';
 
 type ScreenHeaderProps = {
   title: string;
-  backTo?: string;
+  backTo: string;
+  backState?: unknown;
 };
 
-export default function ScreenHeader({ title, backTo }: ScreenHeaderProps) {
+export default function ScreenHeader({ title, backTo, backState }: ScreenHeaderProps) {
   const navigate = useNavigate();
 
   const handleBack = () => {
-    if (backTo) {
-      navigate(backTo);
-      return;
-    }
-    navigate(-1);
+    navigate(backTo, { replace: true, state: backState });
   };
 
   return (

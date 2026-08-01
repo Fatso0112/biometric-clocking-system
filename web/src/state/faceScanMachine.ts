@@ -33,7 +33,7 @@ export type FaceScanEvent =
   | { type: 'CAPTURE' }
   | { type: 'SEND' }
   | { type: 'VERIFY_SUCCESS' }
-  | { type: 'VERIFY_FAILURE'; status: VerificationFailureStatus }
+  | { type: 'VERIFY_FAILURE'; status: VerificationFailureStatus; enforceAttemptLimit?: boolean }
   | { type: 'RETRY' }
   | { type: 'RESET' };
 
@@ -78,11 +78,12 @@ export function faceScanReducer(state: FaceScanState, event: FaceScanEvent): Fac
       return state.status === 'sending' ? { ...state, status: 'success' } : state;
     case 'VERIFY_FAILURE': {
       if (state.status !== 'sending') return state;
-      const attempts = state.attempts + 1;
+      const enforceAttemptLimit = event.enforceAttemptLimit !== false;
+      const attempts = enforceAttemptLimit ? state.attempts + 1 : state.attempts;
       return {
         ...state,
         attempts,
-        status: attempts >= MAX_VERIFICATION_ATTEMPTS ? 'maxAttemptsReached' : event.status,
+        status: enforceAttemptLimit && attempts >= MAX_VERIFICATION_ATTEMPTS ? 'maxAttemptsReached' : event.status,
       };
     }
     case 'RETRY':

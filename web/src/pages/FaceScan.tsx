@@ -8,14 +8,15 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useReducer, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Button from '../components/Button';
 import ScreenHeader from '../components/ScreenHeader';
 import SecurityFooter from '../components/SecurityFooter';
 import { CameraAccessError, useCamera } from '../hooks/useCamera';
 import { useFaceDetection } from '../hooks/useFaceDetection';
-import { verifyFace } from '../services/faceRecognitionApi';
+import { useLogout } from '../hooks/useLogout';
+import { registerFace, verifyFace } from '../services/faceRecognitionApi';
 import {
   faceScanReducer,
   initialFaceScanState,
@@ -23,6 +24,12 @@ import {
   type FaceScanStatus,
   type VerificationFailureStatus,
 } from '../state/faceScanMachine';
+import {
+  getBiometricEnrollmentSource,
+  getBiometricScanMode,
+  getProfileOrigin,
+  REGISTRATION_REQUEST_SUBMITTED_MESSAGE,
+} from '../types/navigation';
 
 type FaceScanPresentation = {
   heading: string;
@@ -179,6 +186,12 @@ function captureVideoFrame(video: HTMLVideoElement) {
 
 export default function FaceScan() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const logout = useLogout();
+  const mode = getBiometricScanMode(location.state);
+  const enrollmentSource = getBiometricEnrollmentSource(location.state);
+  const profileFrom = getProfileOrigin(location.state);
+  const isRegistrationEnrollment = mode === 'enroll' && enrollmentSource === 'registration';
   const [state, dispatch] = useReducer(faceScanReducer, initialFaceScanState);
   const { videoRef, startCamera, stopCamera } = useCamera();
   const requestInFlightRef = useRef(false);
@@ -255,15 +268,30 @@ export default function FaceScan() {
   useEffect(() => {
     if (state.status !== 'success') return;
     stopCamera();
-    const redirectTimer = window.setTimeout(() => navigate('/clock-in-confirmation', { replace: true }), 1500);
+    const redirectTimer = window.setTimeout(() => {
+      if (mode === 'enroll') {
+        if (isRegistrationEnrollment) {
+          logout(REGISTRATION_REQUEST_SUBMITTED_MESSAGE);
+          return;
+        }
+
+        navigate('/profile', {
+          replace: true,
+          state: { biometricUpdateMessage: 'Face recognition updated successfully.', from: profileFrom },
+        });
+        return;
+      }
+
+      navigate('/clock-in-confirmation', { replace: true });
+    }, 1500);
     return () => window.clearTimeout(redirectTimer);
-  }, [navigate, state.status, stopCamera]);
+  }, [isRegistrationEnrollment, logout, mode, navigate, profileFrom, state.status, stopCamera]);
 
   useEffect(() => {
-    if (state.status !== 'maxAttemptsReached') return;
+    if (mode !== 'verify' || state.status !== 'maxAttemptsReached') return;
     stopCamera();
-    navigate('/not-registered', { replace: true });
-  }, [navigate, state.status, stopCamera]);
+    navigate('/not-registered', { replace: true, state: { scanType: 'face' } });
+  }, [mode, navigate, state.status, stopCamera]);
 
   const handlePrimaryAction = async () => {
     if (canRetry) {
@@ -288,6 +316,23 @@ export default function FaceScan() {
 
       dispatch({ type: 'SEND' });
       sendingStarted = true;
+      if (mode === 'enroll') {
+        const result = await registerFace(capturedImage);
+        capturedImage = null;
+
+        if (!mountedRef.current) return;
+        if (result.status === 'registered') {
+          dispatch({ type: 'VERIFY_SUCCESS' });
+        } else {
+          dispatch({
+            type: 'VERIFY_FAILURE',
+            status: mapVerificationFailure(result.status),
+            enforceAttemptLimit: false,
+          });
+        }
+        return;
+      }
+
       const result = await verifyFace(capturedImage);
       capturedImage = null;
 
@@ -295,13 +340,21 @@ export default function FaceScan() {
       if (result.status === 'recognised') {
         dispatch({ type: 'VERIFY_SUCCESS' });
       } else {
-        dispatch({ type: 'VERIFY_FAILURE', status: mapVerificationFailure(result.status) });
+        dispatch({
+          type: 'VERIFY_FAILURE',
+          status: mapVerificationFailure(result.status),
+          enforceAttemptLimit: true,
+        });
       }
     } catch {
       capturedImage = null;
       if (mountedRef.current) {
         if (!sendingStarted) dispatch({ type: 'SEND' });
-        dispatch({ type: 'VERIFY_FAILURE', status: 'networkError' });
+        dispatch({
+          type: 'VERIFY_FAILURE',
+          status: 'networkError',
+          enforceAttemptLimit: mode === 'verify',
+        });
       }
     } finally {
       capturedImage = null;
@@ -309,10 +362,18 @@ export default function FaceScan() {
     }
   };
 
+  const backTo =
+    mode === 'verify' ? '/dashboard' : isRegistrationEnrollment ? '/not-registered' : '/update-biometrics';
+  const backState = isRegistrationEnrollment
+    ? { scanType: 'face' as const }
+    : mode === 'enroll'
+      ? { from: profileFrom }
+      : undefined;
+
   return (
     // AppShell's desktop minimum height pushed the manual scan action below short viewports.
     <AppShell className="sm:!min-h-[calc(100dvh-4rem)]">
-      <ScreenHeader title="Face Recognition" />
+      <ScreenHeader title="Face Recognition" backTo={backTo} backState={backState} />
       <div className="flex flex-1 flex-col items-center justify-between pb-2 pt-5">
         <div className="flex flex-col items-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-light-grey/60">

@@ -25,7 +25,7 @@ export type FingerprintScanEvent =
   | { type: 'SUPPORT_UNAVAILABLE' }
   | { type: 'REQUEST_AUTH' }
   | { type: 'AUTH_SUCCESS' }
-  | { type: 'AUTH_FAILURE'; status: FingerprintFailureStatus }
+  | { type: 'AUTH_FAILURE'; status: FingerprintFailureStatus; enforceAttemptLimit?: boolean }
   | { type: 'RETRY' }
   | { type: 'RESET' };
 
@@ -53,12 +53,13 @@ export function fingerprintScanReducer(
       return state.status === 'requestingAuth' ? { ...state, status: 'success' } : state;
     case 'AUTH_FAILURE': {
       if (state.status !== 'requestingAuth') return state;
-      const attempts = state.attempts + 1;
+      const enforceAttemptLimit = event.enforceAttemptLimit !== false;
+      const attempts = enforceAttemptLimit ? state.attempts + 1 : state.attempts;
 
       return {
         ...state,
         attempts,
-        status: attempts >= MAX_FINGERPRINT_ATTEMPTS ? 'maxAttemptsReached' : event.status,
+        status: enforceAttemptLimit && attempts >= MAX_FINGERPRINT_ATTEMPTS ? 'maxAttemptsReached' : event.status,
       };
     }
     case 'RETRY':

@@ -9,6 +9,16 @@ export interface FaceVerificationFailure {
 
 export type FaceVerificationResult = FaceVerificationSuccess | FaceVerificationFailure;
 
+export interface FaceRegistrationSuccess {
+  status: 'registered';
+}
+
+export interface FaceRegistrationFailure {
+  status: 'network_error' | 'timeout';
+}
+
+export type FaceRegistrationResult = FaceRegistrationSuccess | FaceRegistrationFailure;
+
 type MockOutcome = FaceVerificationResult['status'];
 
 const MOCK_DELAY_MS = 1400;
@@ -57,4 +67,17 @@ export async function verifyFace(image: Blob): Promise<FaceVerificationResult> {
   }
 
   return { status: outcome };
+}
+
+export async function registerFace(image: Blob): Promise<FaceRegistrationResult> {
+  // MOCK IMPLEMENTATION — use ?faceEnrollResult=success|network-error|timeout.
+  // A real implementation uploads the captured image to the face-enrollment endpoint.
+  void image;
+
+  const requested = new URLSearchParams(window.location.search).get('faceEnrollResult');
+  await wait(MOCK_DELAY_MS);
+
+  if (requested === 'network-error' || requested === 'network_error') return { status: 'network_error' };
+  if (requested === 'timeout') return { status: 'timeout' };
+  return { status: 'registered' };
 }

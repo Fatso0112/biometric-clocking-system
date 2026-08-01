@@ -9,6 +9,16 @@ export interface WebAuthnFailure {
 
 export type WebAuthnResult = WebAuthnSuccess | WebAuthnFailure;
 
+export interface WebAuthnRegistrationSuccess {
+  status: 'registered';
+}
+
+export interface WebAuthnRegistrationFailure {
+  status: 'network_error' | 'timeout';
+}
+
+export type WebAuthnRegistrationResult = WebAuthnRegistrationSuccess | WebAuthnRegistrationFailure;
+
 type MockOutcome = WebAuthnResult['status'];
 
 const MOCK_DELAY_MS = 1200;
@@ -69,6 +79,45 @@ export async function verifyAssertion(assertion: PublicKeyCredential): Promise<W
   }
 
   return { status: outcome };
+}
+
+export async function getRegistrationOptions(staffNumber: string): Promise<PublicKeyCredentialCreationOptions> {
+  // MOCK IMPLEMENTATION — a real backend must generate this challenge and bind the credential to staffNumber.
+  return {
+    challenge: createChallenge(),
+    rp: {
+      name: 'HR Attendance Management System',
+    },
+    user: {
+      id: new TextEncoder().encode(staffNumber),
+      name: `${staffNumber}@hr.local`,
+      displayName: `Employee ${staffNumber}`,
+    },
+    pubKeyCredParams: [
+      { type: 'public-key', alg: -7 },
+      { type: 'public-key', alg: -257 },
+    ],
+    timeout: 60_000,
+    attestation: 'none',
+    authenticatorSelection: {
+      authenticatorAttachment: 'platform',
+      residentKey: 'required',
+      userVerification: 'required',
+    },
+  };
+}
+
+export async function registerCredential(credential: PublicKeyCredential): Promise<WebAuthnRegistrationResult> {
+  // MOCK IMPLEMENTATION — use ?fingerprintEnrollResult=success|network-error|timeout.
+  // A real implementation POSTs the attestation to the backend for storage against the employee record.
+  void credential;
+
+  const requested = new URLSearchParams(window.location.search).get('fingerprintEnrollResult');
+  await wait(MOCK_DELAY_MS);
+
+  if (requested === 'network-error' || requested === 'network_error') return { status: 'network_error' };
+  if (requested === 'timeout') return { status: 'timeout' };
+  return { status: 'registered' };
 }
 
 export function getDevTestCredentialOptions(): PublicKeyCredentialCreationOptions {

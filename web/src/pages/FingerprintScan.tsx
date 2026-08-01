@@ -1,13 +1,17 @@
 import { Fingerprint } from 'lucide-react';
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Button from '../components/Button';
 import ScreenHeader from '../components/ScreenHeader';
 import SecurityFooter from '../components/SecurityFooter';
+import { useSession } from '../context/SessionContext';
+import { useLogout } from '../hooks/useLogout';
 import {
   getAssertionOptions,
   getDevTestCredentialOptions,
+  getRegistrationOptions,
+  registerCredential,
   verifyAssertion,
 } from '../services/webauthnApi';
 import {
@@ -16,6 +20,12 @@ import {
   type FingerprintScanState,
   type FingerprintScanStatus,
 } from '../state/fingerprintScanMachine';
+import {
+  getBiometricEnrollmentSource,
+  getBiometricScanMode,
+  getProfileOrigin,
+  REGISTRATION_REQUEST_SUBMITTED_MESSAGE,
+} from '../types/navigation';
 
 type FingerprintPresentation = {
   heading: string;
@@ -99,6 +109,13 @@ function getDevCredentialLabel(status: DevCredentialStatus) {
 
 export default function FingerprintScan() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { staffNumber } = useSession();
+  const logout = useLogout();
+  const mode = getBiometricScanMode(location.state);
+  const enrollmentSource = getBiometricEnrollmentSource(location.state);
+  const profileFrom = getProfileOrigin(location.state);
+  const isRegistrationEnrollment = mode === 'enroll' && enrollmentSource === 'registration';
   const [state, dispatch] = useReducer(fingerprintScanReducer, initialFingerprintScanState);
   const [devCredentialStatus, setDevCredentialStatus] = useState<DevCredentialStatus>('idle');
   const mountedRef = useRef(true);
@@ -127,7 +144,7 @@ export default function FingerprintScan() {
       const supported =
         typeof window.PublicKeyCredential !== 'undefined' &&
         typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function' &&
-        typeof navigator.credentials?.get === 'function' &&
+        typeof navigator.credentials?.[mode === 'enroll' ? 'create' : 'get'] === 'function' &&
         (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
 
       if (active) dispatch({ type: supported ? 'SUPPORT_AVAILABLE' : 'SUPPORT_UNAVAILABLE' });
@@ -138,17 +155,34 @@ export default function FingerprintScan() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     if (state.status !== 'success') return;
-    const redirectTimer = window.setTimeout(() => navigate('/clock-in-confirmation', { replace: true }), 1500);
+    const redirectTimer = window.setTimeout(() => {
+      if (mode === 'enroll') {
+        if (isRegistrationEnrollment) {
+          logout(REGISTRATION_REQUEST_SUBMITTED_MESSAGE);
+          return;
+        }
+
+        navigate('/profile', {
+          replace: true,
+          state: { biometricUpdateMessage: 'Fingerprint updated successfully.', from: profileFrom },
+        });
+        return;
+      }
+
+      navigate('/clock-in-confirmation', { replace: true });
+    }, 1500);
     return () => window.clearTimeout(redirectTimer);
-  }, [navigate, state.status]);
+  }, [isRegistrationEnrollment, logout, mode, navigate, profileFrom, state.status]);
 
   useEffect(() => {
-    if (state.status === 'maxAttemptsReached') navigate('/not-registered', { replace: true });
-  }, [navigate, state.status]);
+    if (mode === 'verify' && state.status === 'maxAttemptsReached') {
+      navigate('/not-registered', { replace: true, state: { scanType: 'fingerprint' } });
+    }
+  }, [mode, navigate, state.status]);
 
   const handlePrimaryAction = async () => {
     if (canRetry) {
@@ -164,6 +198,25 @@ export default function FingerprintScan() {
     requestControllerRef.current = controller;
 
     try {
+      if (mode === 'enroll') {
+        const publicKey = await getRegistrationOptions(staffNumber!);
+        const credential = await navigator.credentials.create({ publicKey, signal: controller.signal });
+
+        if (!(credential instanceof PublicKeyCredential)) {
+          throw new Error('The authenticator did not return a public-key credential.');
+        }
+
+        const result = await registerCredential(credential);
+        if (!mountedRef.current) return;
+
+        if (result.status === 'registered') {
+          dispatch({ type: 'AUTH_SUCCESS' });
+        } else {
+          dispatch({ type: 'AUTH_FAILURE', status: 'error', enforceAttemptLimit: false });
+        }
+        return;
+      }
+
       const publicKey = await getAssertionOptions();
       const credential = await navigator.credentials.get({ publicKey, signal: controller.signal });
 
@@ -180,11 +233,16 @@ export default function FingerprintScan() {
         dispatch({
           type: 'AUTH_FAILURE',
           status: result.status === 'not_recognised' ? 'notRecognised' : 'error',
+          enforceAttemptLimit: true,
         });
       }
     } catch (error) {
       if (!mountedRef.current || controller.signal.aborted) return;
-      dispatch({ type: 'AUTH_FAILURE', status: isUserCancellation(error) ? 'userCancelled' : 'error' });
+      dispatch({
+        type: 'AUTH_FAILURE',
+        status: isUserCancellation(error) ? 'userCancelled' : 'error',
+        enforceAttemptLimit: mode === 'verify',
+      });
     } finally {
       if (requestControllerRef.current === controller) requestControllerRef.current = null;
       requestInFlightRef.current = false;
@@ -213,10 +271,18 @@ export default function FingerprintScan() {
     }
   };
 
+  const backTo =
+    mode === 'verify' ? '/dashboard' : isRegistrationEnrollment ? '/not-registered' : '/update-biometrics';
+  const backState = isRegistrationEnrollment
+    ? { scanType: 'fingerprint' as const }
+    : mode === 'enroll'
+      ? { from: profileFrom }
+      : undefined;
+
   return (
     // Match FaceScan's short-desktop override so the scan action is not pushed below the viewport.
     <AppShell className="sm:!min-h-[calc(100dvh-4rem)]">
-      <ScreenHeader title="Fingerprint Scan" backTo="/dashboard" />
+      <ScreenHeader title="Fingerprint Scan" backTo={backTo} backState={backState} />
       <div className="flex flex-1 flex-col items-center justify-between pb-2 pt-5">
         <div className="flex flex-col items-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-light-grey/60">
@@ -249,7 +315,7 @@ export default function FingerprintScan() {
           >
             {presentation.buttonLabel}
           </Button>
-          {import.meta.env.DEV ? (
+          {import.meta.env.DEV && mode === 'verify' ? (
             <button
               type="button"
               onClick={handleRegisterTestCredential}

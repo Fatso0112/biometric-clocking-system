@@ -4,13 +4,15 @@ import AppShell from '../components/AppShell';
 import Card from '../components/Card';
 import EmployeeHeader from '../components/EmployeeHeader';
 import ListItem from '../components/ListItem';
+import { useSession } from '../context/SessionContext';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { staffNumber } = useSession();
 
   return (
     <AppShell>
-      <EmployeeHeader staffNumber="10001" onLogout={() => navigate('/')} />
+      <EmployeeHeader staffNumber={staffNumber!} profileFrom="/dashboard" />
 
       <Card className="mt-3 p-5">
         <h2 className="text-lg font-semibold">Authentication Method</h2>
