@@ -409,6 +409,27 @@ builder.Services.AddScoped<
     IBiometricEnrolmentService,
     BiometricEnrolmentService>();
 
+var allowedFrontendOrigins =
+    builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()
+    ?? Array.Empty<string>();
+
+builder.Services.AddCors(
+    options =>
+    {
+        options.AddPolicy(
+            "FrontendClients",
+            policy =>
+            {
+                policy
+                    .WithOrigins(
+                        allowedFrontendOrigins)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            });
+    });
+
 var app =
     builder.Build();
 
@@ -441,6 +462,8 @@ if (swaggerEnabled)
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("FrontendClients");
 
 app.UseAuthentication();
 app.UseAuthorization();
