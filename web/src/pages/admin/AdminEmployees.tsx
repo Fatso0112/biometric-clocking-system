@@ -1,4 +1,5 @@
 import {
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -38,6 +39,7 @@ import {
   type DepartmentResponse,
 } from '../../services/departmentsApi';
 import { ApiError } from '../../services/httpClient';
+import { Link } from 'react-router-dom';
 
 function getErrorMessage(
   error: unknown,
@@ -289,22 +291,32 @@ export default function AdminEmployees() {
         title="Employees"
         description="View live employee records, departments, work locations, roles and account access."
         actions={
-          <PortalActionButton
-            tone="secondary"
-            onClick={() => {
-              void loadEmployees();
-            }}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${
-                isLoading
-                  ? 'animate-spin'
-                  : ''
-              }`}
-            />
-            Refresh
-          </PortalActionButton>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/admin/employees/new"
+              className="inline-flex min-h-11 items-center gap-2 rounded-card bg-black px-4 text-sm font-semibold text-white"
+            >
+              <Plus className="h-4 w-4" />
+              Add employee
+            </Link>
+
+            <PortalActionButton
+              tone="secondary"
+              onClick={() => {
+                void loadEmployees();
+              }}
+              disabled={isLoading}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${
+                  isLoading
+                    ? 'animate-spin'
+                    : ''
+                }`}
+              />
+              Refresh
+            </PortalActionButton>
+          </div>
         }
       />
 

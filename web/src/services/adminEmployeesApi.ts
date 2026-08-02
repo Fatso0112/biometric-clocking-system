@@ -37,6 +37,51 @@ export interface UserAccountResponse {
   updatedAtUtc: string | null;
 }
 
+export interface CreateAdminEmployeeRequest {
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phoneNumber: string | null;
+  departmentId: string;
+  workLocationId: string;
+}
+
+export async function createAdminEmployee(
+  request: CreateAdminEmployeeRequest,
+  accessToken: string,
+): Promise<AdminEmployeeResponse> {
+  return apiRequest<AdminEmployeeResponse>(
+    '/api/v1/employees',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        employeeNumber:
+          request.employeeNumber.trim(),
+
+        firstName:
+          request.firstName.trim(),
+
+        lastName:
+          request.lastName.trim(),
+
+        email:
+          request.email?.trim() || null,
+
+        phoneNumber:
+          request.phoneNumber?.trim() || null,
+
+        departmentId:
+          request.departmentId,
+
+        workLocationId:
+          request.workLocationId,
+      }),
+    },
+    accessToken,
+  );
+}
+
 interface PagedUserAccountsResponse {
   page: number;
   pageSize: number;
