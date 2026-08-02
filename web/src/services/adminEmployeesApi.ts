@@ -146,3 +146,82 @@ export async function updateUserAccountStatus(
     accessToken,
   );
 }
+
+export interface AvailableRolesResponse {
+  roles: string[];
+}
+
+export interface CreateUserAccountRequest {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string | null;
+  employeeId: string | null;
+  roles: string[];
+}
+
+export async function getAvailableUserRoles(
+  accessToken: string,
+): Promise<string[]> {
+  const response =
+    await apiRequest<AvailableRolesResponse>(
+      '/api/v1/users/roles',
+      {
+        method: 'GET',
+      },
+      accessToken,
+    );
+
+  return response.roles;
+}
+
+export async function createUserAccount(
+  request: CreateUserAccountRequest,
+  accessToken: string,
+): Promise<UserAccountResponse> {
+  return apiRequest<UserAccountResponse>(
+    '/api/v1/users',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        email: request.email.trim(),
+
+        password: request.password,
+
+        firstName:
+          request.firstName.trim(),
+
+        lastName:
+          request.lastName.trim(),
+
+        phoneNumber:
+          request.phoneNumber?.trim() ||
+          null,
+
+        employeeId:
+          request.employeeId,
+
+        roles: request.roles,
+      }),
+    },
+    accessToken,
+  );
+}
+
+export async function updateUserRoles(
+  userId: string,
+  roles: string[],
+  accessToken: string,
+): Promise<UserAccountResponse> {
+  return apiRequest<UserAccountResponse>(
+    `/api/v1/users/${encodeURIComponent(userId)}/roles`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        roles,
+      }),
+    },
+    accessToken,
+  );
+}

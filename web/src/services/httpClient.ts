@@ -1,15 +1,26 @@
 import { API_BASE_URL } from "../config/api";
 
+export interface IdentityApiError {
+  code: string;
+  description: string;
+}
+
 export interface ApiProblem {
   errorCode?: string;
   message?: string;
   errors?: Record<string, string[]>;
+  identityErrors?: IdentityApiError[];
 }
 
 export class ApiError extends Error {
   public readonly status: number;
   public readonly errorCode?: string;
-  public readonly errors?: Record<string, string[]>;
+  public readonly errors?: Record<
+    string,
+    string[]
+  >;
+
+  public readonly identityErrors?: IdentityApiError[];
 
   public constructor(
     status: number,
@@ -17,10 +28,13 @@ export class ApiError extends Error {
     problem?: ApiProblem,
   ) {
     super(message);
-    this.name = "ApiError";
+
+    this.name = 'ApiError';
     this.status = status;
     this.errorCode = problem?.errorCode;
     this.errors = problem?.errors;
+    this.identityErrors =
+      problem?.identityErrors;
   }
 }
 
