@@ -1,0 +1,6 @@
+import { resolveFeatureFlag } from './featureFlagPolicy';
+
+export const ADMIN_HR_PORTALS_ENABLED = resolveFeatureFlag(
+  import.meta.env.VITE_ENABLE_ADMIN_HR_PORTALS,
+  true,
+);
