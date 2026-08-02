@@ -1,11 +1,22 @@
-import { Pencil, Plus, Search, UserCheck, UsersRound } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  UserCheck,
+  UsersRound,
+} from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   MetricCard,
   MetricGrid,
   PortalActionButton,
   PortalEmptyState,
+  PortalNotice,
   PortalPageHeader,
   PortalPanel,
   PortalStatus,
@@ -15,95 +26,592 @@ import {
   portalThClass,
 } from '../../components/portal/PortalUi';
 import { useSession } from '../../context/SessionContext';
-import { usePortalDemo } from '../../hooks/usePortalDemo';
-import { setPortalEmployeeStatus } from '../../services/portalDemoRepository';
-import { getDisplayName } from '../../utils/portalFormatters';
+import {
+  getAdminEmployees,
+  getAllUserAccounts,
+  updateUserAccountStatus,
+  type AdminEmployeeResponse,
+  type UserAccountResponse,
+} from '../../services/adminEmployeesApi';
+import {
+  getDepartments,
+  type DepartmentResponse,
+} from '../../services/departmentsApi';
+import { ApiError } from '../../services/httpClient';
+
+function getErrorMessage(
+  error: unknown,
+): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return 'Your login session has expired. Please log in again.';
+    }
+
+    if (error.status === 403) {
+      return 'You do not have permission to manage employee accounts.';
+    }
+
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'The request could not be completed.';
+}
+
+function formatRole(role: string): string {
+  const knownRoles: Record<string, string> = {
+    Employee: 'Employee',
+    Supervisor: 'Supervisor',
+    HROfficer: 'HR Officer',
+    PayrollOfficer: 'Payroll Officer',
+    SystemAdministrator: 'System Administrator',
+    ExecutiveViewer: 'Executive Viewer',
+  };
+
+  return knownRoles[role] ?? role;
+}
 
 export default function AdminEmployees() {
-  const state = usePortalDemo();
-  const { employeeNumber: actorEmployeeNumber } = useSession();
+  const { accessToken } = useSession();
+
+  const [employees, setEmployees] = useState<
+    AdminEmployeeResponse[]
+  >([]);
+
+  const [departments, setDepartments] = useState<
+    DepartmentResponse[]
+  >([]);
+
+  const [userAccounts, setUserAccounts] = useState<
+    UserAccountResponse[]
+  >([]);
+
   const [query, setQuery] = useState('');
-  const [departmentId, setDepartmentId] = useState('all');
+  const [departmentId, setDepartmentId] =
+    useState('all');
   const [status, setStatus] = useState('all');
-  const departmentNames = new Map(state.departments.map((department) => [department.id, department.name]));
-  const rolesByEmployee = useMemo(() => {
-    const roles = new Map<string, string[]>();
-    for (const assignment of state.roleAssignments) {
-      if (!assignment.active) continue;
-      roles.set(assignment.employeeNumber, [...(roles.get(assignment.employeeNumber) ?? []), assignment.role]);
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [
+    updatingUserId,
+    setUpdatingUserId,
+  ] = useState<string | null>(null);
+
+  const [message, setMessage] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
+
+  const loadEmployees =
+    useCallback(async () => {
+      if (!accessToken) {
+        setMessage({
+          text: 'No authenticated session was found. Please log in again.',
+          error: true,
+        });
+
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setMessage(null);
+
+      try {
+        const [
+          employeeResponse,
+          departmentResponse,
+          accountResponse,
+        ] = await Promise.all([
+          getAdminEmployees(accessToken),
+          getDepartments(accessToken),
+          getAllUserAccounts(accessToken),
+        ]);
+
+        setEmployees(employeeResponse);
+        setDepartments(departmentResponse);
+        setUserAccounts(accountResponse);
+      } catch (error) {
+        setMessage({
+          text: getErrorMessage(error),
+          error: true,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }, [accessToken]);
+
+  useEffect(() => {
+    void loadEmployees();
+  }, [loadEmployees]);
+
+  const accountByEmployeeId =
+    useMemo(() => {
+      const accounts = new Map<
+        string,
+        UserAccountResponse
+      >();
+
+      for (const account of userAccounts) {
+        if (account.employeeId) {
+          accounts.set(
+            account.employeeId,
+            account,
+          );
+        }
+      }
+
+      return accounts;
+    }, [userAccounts]);
+
+  const filteredEmployees =
+    useMemo(() => {
+      const normalizedQuery =
+        query.trim().toLowerCase();
+
+      return employees.filter((employee) => {
+        const matchesQuery =
+          !normalizedQuery ||
+          [
+            employee.employeeNumber,
+            employee.firstName,
+            employee.lastName,
+            employee.email ?? '',
+            employee.departmentName,
+            employee.workLocationName,
+          ].some((value) =>
+            value
+              .toLowerCase()
+              .includes(normalizedQuery),
+          );
+
+        const matchesDepartment =
+          departmentId === 'all' ||
+          employee.departmentId ===
+            departmentId;
+
+        const matchesStatus =
+          status === 'all' ||
+          (status === 'active'
+            ? employee.isActive
+            : !employee.isActive);
+
+        return (
+          matchesQuery &&
+          matchesDepartment &&
+          matchesStatus
+        );
+      });
+    }, [
+      departmentId,
+      employees,
+      query,
+      status,
+    ]);
+
+  const activeEmployeeCount =
+    employees.filter(
+      (employee) => employee.isActive,
+    ).length;
+
+  const linkedAccountCount =
+    employees.filter((employee) =>
+      accountByEmployeeId.has(employee.id),
+    ).length;
+
+  async function handleAccountStatusChange(
+    account: UserAccountResponse,
+  ) {
+    if (!accessToken) {
+      setMessage({
+        text: 'Your login session is unavailable. Please log in again.',
+        error: true,
+      });
+
+      return;
     }
-    return roles;
-  }, [state.roleAssignments]);
-  const normalizedQuery = query.trim().toLowerCase();
-  const employees = state.employees.filter((employee) => {
-    const matchesQuery = !normalizedQuery || [
-      employee.employeeNumber,
-      employee.firstName,
-      employee.lastName,
-      employee.email,
-    ].some((value) => value.toLowerCase().includes(normalizedQuery));
-    return matchesQuery &&
-      (departmentId === 'all' || employee.departmentId === departmentId) &&
-      (status === 'all' || employee.status === status);
-  });
+
+    const nextStatus = !account.isActive;
+
+    const confirmed = window.confirm(
+      nextStatus
+        ? `Enable login access for ${account.firstName} ${account.lastName}?`
+        : `Disable login access for ${account.firstName} ${account.lastName}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdatingUserId(account.id);
+    setMessage(null);
+
+    try {
+      const updatedAccount =
+        await updateUserAccountStatus(
+          account.id,
+          nextStatus,
+          accessToken,
+        );
+
+      setUserAccounts((current) =>
+        current.map((item) =>
+          item.id === updatedAccount.id
+            ? updatedAccount
+            : item,
+        ),
+      );
+
+      setMessage({
+        text: nextStatus
+          ? 'Login access enabled successfully.'
+          : 'Login access disabled successfully.',
+        error: false,
+      });
+    } catch (error) {
+      setMessage({
+        text: getErrorMessage(error),
+        error: true,
+      });
+    } finally {
+      setUpdatingUserId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
       <PortalPageHeader
         title="Employees"
-        description="Search, add, edit, activate, or deactivate people in the shared frontend demo repository."
-        actions={(
-          <Link to="/admin/employees/new" className="inline-flex min-h-11 items-center gap-2 rounded-card bg-black px-4 text-sm font-semibold text-white">
-            <Plus className="h-4 w-4" /> Add employee
-          </Link>
-        )}
+        description="View live employee records, departments, work locations, roles and account access."
+        actions={
+          <PortalActionButton
+            tone="secondary"
+            onClick={() => {
+              void loadEmployees();
+            }}
+            disabled={isLoading}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${
+                isLoading
+                  ? 'animate-spin'
+                  : ''
+              }`}
+            />
+            Refresh
+          </PortalActionButton>
+        }
       />
+
       <MetricGrid>
-        <MetricCard label="Total employees" value={state.employees.length} icon={<UsersRound className="h-5 w-5" />} />
-        <MetricCard label="Active" value={state.employees.filter((item) => item.status === 'active').length} icon={<UserCheck className="h-5 w-5" />} tone="green" />
-        <MetricCard label="Departments" value={state.departments.length} icon={<UsersRound className="h-5 w-5" />} />
-        <MetricCard label="Filtered results" value={employees.length} icon={<Search className="h-5 w-5" />} />
+        <MetricCard
+          label="Total employees"
+          value={
+            isLoading
+              ? '—'
+              : employees.length
+          }
+          icon={
+            <UsersRound className="h-5 w-5" />
+          }
+        />
+
+        <MetricCard
+          label="Active records"
+          value={
+            isLoading
+              ? '—'
+              : activeEmployeeCount
+          }
+          icon={
+            <UserCheck className="h-5 w-5" />
+          }
+          tone="green"
+        />
+
+        <MetricCard
+          label="Departments"
+          value={
+            isLoading
+              ? '—'
+              : departments.length
+          }
+          icon={
+            <UsersRound className="h-5 w-5" />
+          }
+        />
+
+        <MetricCard
+          label="Login accounts"
+          value={
+            isLoading
+              ? '—'
+              : linkedAccountCount
+          }
+          icon={
+            <ShieldCheck className="h-5 w-5" />
+          }
+        />
       </MetricGrid>
+
+      {message ? (
+        <PortalNotice
+          tone={
+            message.error
+              ? 'error'
+              : 'success'
+          }
+        >
+          {message.text}
+        </PortalNotice>
+      ) : null}
+
       <PortalPanel className="mt-6">
         <div className="grid gap-3 border-b border-light-grey p-4 md:grid-cols-[minmax(240px,1fr)_220px_180px]">
           <label className="relative">
-            <span className="sr-only">Search employees</span>
+            <span className="sr-only">
+              Search employees
+            </span>
+
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-dark-grey" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, employee no. or email" className={`${portalInputClass} pl-11`} />
+
+            <input
+              value={query}
+              onChange={(event) =>
+                setQuery(event.target.value)
+              }
+              placeholder="Search name, employee no. or email"
+              className={`${portalInputClass} pl-11`}
+            />
           </label>
-          <select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} className={portalInputClass} aria-label="Filter by department">
-            <option value="all">All departments</option>
-            {state.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+
+          <select
+            value={departmentId}
+            onChange={(event) =>
+              setDepartmentId(
+                event.target.value,
+              )
+            }
+            className={portalInputClass}
+            aria-label="Filter by department"
+          >
+            <option value="all">
+              All departments
+            </option>
+
+            {departments.map(
+              (department) => (
+                <option
+                  key={department.id}
+                  value={department.id}
+                >
+                  {department.name}
+                </option>
+              ),
+            )}
           </select>
-          <select value={status} onChange={(event) => setStatus(event.target.value)} className={portalInputClass} aria-label="Filter by status">
-            <option value="all">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option>
+
+          <select
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value)
+            }
+            className={portalInputClass}
+            aria-label="Filter by status"
+          >
+            <option value="all">
+              All statuses
+            </option>
+            <option value="active">
+              Active
+            </option>
+            <option value="inactive">
+              Inactive
+            </option>
           </select>
         </div>
-        {employees.length === 0 ? <PortalEmptyState>No employees match these filters.</PortalEmptyState> : (
+
+        {isLoading ? (
+          <PortalEmptyState>
+            Loading employees…
+          </PortalEmptyState>
+        ) : filteredEmployees.length === 0 ? (
+          <PortalEmptyState>
+            {employees.length === 0
+              ? 'No employees have been created yet.'
+              : 'No employees match these filters.'}
+          </PortalEmptyState>
+        ) : (
           <PortalTable>
-            <thead><tr><th className={portalThClass}>Employee</th><th className={portalThClass}>Employee No.</th><th className={portalThClass}>Department</th><th className={portalThClass}>Roles</th><th className={portalThClass}>Status</th><th className={portalThClass}>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th className={portalThClass}>
+                  Employee
+                </th>
+                <th className={portalThClass}>
+                  Employee No.
+                </th>
+                <th className={portalThClass}>
+                  Department
+                </th>
+                <th className={portalThClass}>
+                  Work location
+                </th>
+                <th className={portalThClass}>
+                  Roles
+                </th>
+                <th className={portalThClass}>
+                  Record
+                </th>
+                <th className={portalThClass}>
+                  Login
+                </th>
+                <th className={portalThClass}>
+                  Action
+                </th>
+              </tr>
+            </thead>
+
             <tbody>
-              {employees.map((employee) => (
-                <tr key={employee.employeeNumber}>
-                  <td className={portalTdClass}><p className="font-semibold">{getDisplayName(employee.firstName, employee.lastName)}</p><p className="mt-1 text-xs text-dark-grey">{employee.email}</p></td>
-                  <td className={portalTdClass}>{employee.employeeNumber}</td>
-                  <td className={portalTdClass}>{departmentNames.get(employee.departmentId) ?? 'Unassigned'}</td>
-                  <td className={portalTdClass}><span className="capitalize">{(rolesByEmployee.get(employee.employeeNumber) ?? []).join(', ') || 'None'}</span></td>
-                  <td className={portalTdClass}><PortalStatus value={employee.status} /></td>
-                  <td className={portalTdClass}>
-                    <div className="flex items-center gap-2">
-                      <Link to={`/admin/employees/${encodeURIComponent(employee.employeeNumber)}`} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-light-grey" aria-label={`Edit ${getDisplayName(employee.firstName, employee.lastName)}`}><Pencil className="h-4 w-4" /></Link>
-                      <PortalActionButton
-                        tone={employee.status === 'active' ? 'danger' : 'secondary'}
-                        className="min-h-10 px-3 text-xs"
-                        onClick={() => setPortalEmployeeStatus(employee.employeeNumber, employee.status === 'active' ? 'inactive' : 'active', actorEmployeeNumber ?? '40001')}
+              {filteredEmployees.map(
+                (employee) => {
+                  const account =
+                    accountByEmployeeId.get(
+                      employee.id,
+                    );
+
+                  return (
+                    <tr key={employee.id}>
+                      <td
+                        className={
+                          portalTdClass
+                        }
                       >
-                        {employee.status === 'active' ? 'Deactivate' : 'Activate'}
-                      </PortalActionButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <p className="font-semibold">
+                          {employee.fullName}
+                        </p>
+
+                        <p className="mt-1 text-xs text-dark-grey">
+                          {employee.email ??
+                            'No email address'}
+                        </p>
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        {employee.employeeNumber}
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        {employee.departmentName}
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        {employee.workLocationName}
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        {account?.roles.length
+                          ? account.roles
+                              .map(formatRole)
+                              .join(', ')
+                          : 'None'}
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        <PortalStatus
+                          value={
+                            employee.isActive
+                              ? 'Active'
+                              : 'Inactive'
+                          }
+                        />
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        {account ? (
+                          <PortalStatus
+                            value={
+                              account.isLockedOut
+                                ? 'Locked'
+                                : account.isActive
+                                  ? 'Active'
+                                  : 'Inactive'
+                            }
+                          />
+                        ) : (
+                          <PortalStatus value="No account" />
+                        )}
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        {account ? (
+                          <PortalActionButton
+                            tone={
+                              account.isActive
+                                ? 'danger'
+                                : 'secondary'
+                            }
+                            className="min-h-10 px-3 text-xs"
+                            disabled={
+                              updatingUserId ===
+                              account.id
+                            }
+                            onClick={() => {
+                              void handleAccountStatusChange(
+                                account,
+                              );
+                            }}
+                          >
+                            {updatingUserId ===
+                            account.id
+                              ? 'Saving…'
+                              : account.isActive
+                                ? 'Disable login'
+                                : 'Enable login'}
+                          </PortalActionButton>
+                        ) : (
+                          <span className="text-xs text-dark-grey">
+                            No login account
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                },
+              )}
             </tbody>
           </PortalTable>
         )}
