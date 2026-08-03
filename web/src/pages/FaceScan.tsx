@@ -391,6 +391,7 @@ export default function FaceScan() {
 
         const verification = await verifyMockBiometric(
           employeeNumber,
+          clockingFlow.intendedAction,
           accessToken,
         );
         const event = await recordLiveAttendance(

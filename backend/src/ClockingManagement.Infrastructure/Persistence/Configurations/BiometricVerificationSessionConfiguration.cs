@@ -44,6 +44,11 @@ public sealed class BiometricVerificationSessionConfiguration
             .HasPrecision(5, 2)
             .IsRequired();
 
+        builder.Property(session => session.IntendedEventType)
+            .HasColumnName("intended_event_type")
+            .HasConversion<string>()
+            .HasMaxLength(30);
+
         builder.Property(session => session.ExpiresAtUtc)
             .HasColumnName("expires_at_utc")
             .IsRequired();

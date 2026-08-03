@@ -5,7 +5,11 @@ namespace ClockingManagement.Application.Biometrics;
 public sealed record MockBiometricVerificationRequest(
     [Required]
     [StringLength(30, MinimumLength = 2)]
-    string EmployeeNumber);
+    string EmployeeNumber,
+
+    [Required]
+    [StringLength(30, MinimumLength = 2)]
+    string AttendanceAction);
 
 public sealed record BiometricVerificationResponse(
     Guid SessionId,

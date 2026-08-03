@@ -2,7 +2,7 @@ import {
   AlertCircle,
   Fingerprint,
   FlaskConical,
-  ScanFace,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   useEffect,
@@ -154,6 +154,7 @@ export default function Dashboard() {
       const verification =
         await verifyMockBiometric(
           employeeNumber,
+          clockingFlow.intendedAction,
           accessToken,
         );
 
@@ -228,8 +229,7 @@ export default function Dashboard() {
         </h2>
 
         <p className="mt-1 text-sm text-dark-grey">
-          Choose a verification method to
-          submit this attendance action.
+          Verify your identity before submitting this attendance action.
         </p>
 
         {errorMessage ? (
@@ -256,11 +256,11 @@ export default function Dashboard() {
                 strokeWidth={1.5}
               />
             }
-            title="Fingerprint"
-            subtitle="Use this device’s platform authenticator with the MVP backend verifier"
+            title="Verify with this device"
+            subtitle="Use the phone's face, fingerprint, or secure platform authenticator"
             onClick={() =>
               navigate(
-                '/scan/fingerprint',
+                '/scan/device',
                 {
                   state: scanState,
                 },
@@ -268,21 +268,18 @@ export default function Dashboard() {
             }
           />
 
-          <ListItem
+          <NoticeBanner
+            className="mt-1"
             icon={
-              <ScanFace
-                className="h-8 w-8"
+              <ShieldCheck
+                className="h-5 w-5"
                 strokeWidth={1.5}
+                aria-hidden="true"
               />
             }
-            title="Face Recognition"
-            subtitle="Use camera alignment with the MVP backend verifier"
-            onClick={() =>
-              navigate('/scan/face', {
-                state: scanState,
-              })
-            }
-          />
+          >
+            A fresh device verification is required for every attendance action. Biometric templates never leave the phone.
+          </NoticeBanner>
 
           {MOCK_BIOMETRIC_ENABLED ? (
             <div className="border-t border-light-grey pt-4">

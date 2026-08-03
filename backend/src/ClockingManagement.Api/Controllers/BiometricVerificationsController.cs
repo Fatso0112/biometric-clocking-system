@@ -29,12 +29,16 @@ public sealed class BiometricVerificationsController
     private readonly IVerificationTokenService
         _verificationTokenService;
 
+    private readonly bool _mockVerificationEnabled;
+
     public BiometricVerificationsController(
         ApplicationDbContext dbContext,
         IBiometricVerificationService
             biometricVerificationService,
         IVerificationTokenService
-            verificationTokenService)
+            verificationTokenService,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         _dbContext =
             dbContext;
@@ -44,6 +48,11 @@ public sealed class BiometricVerificationsController
 
         _verificationTokenService =
             verificationTokenService;
+
+        _mockVerificationEnabled =
+            environment.IsDevelopment() ||
+            configuration.GetValue<bool>(
+                "Biometrics:EnableMockVerification");
     }
 
     [HttpPost("mock")]
@@ -67,6 +76,18 @@ public sealed class BiometricVerificationsController
         MockBiometricVerificationRequest request,
         CancellationToken cancellationToken)
     {
+        if (!_mockVerificationEnabled)
+        {
+            return NotFound(new
+            {
+                errorCode =
+                    "MOCK_BIOMETRIC_DISABLED",
+
+                message =
+                    "Mock biometric verification is disabled."
+            });
+        }
+
         var authenticatedEmployeeId =
             GetAuthenticatedEmployeeId();
 
@@ -99,6 +120,20 @@ public sealed class BiometricVerificationsController
 
         var employeeNumber =
             request.EmployeeNumber.Trim();
+
+        if (!TryParseAttendanceAction(
+                request.AttendanceAction,
+                out var intendedEventType))
+        {
+            return BadRequest(new
+            {
+                errorCode =
+                    "INVALID_ATTENDANCE_ACTION",
+
+                message =
+                    "The attendance action is not supported."
+            });
+        }
 
         var employee =
             await _dbContext.Employees
@@ -348,6 +383,9 @@ public sealed class BiometricVerificationsController
                 Confidence =
                     verificationResult.Confidence,
 
+                IntendedEventType =
+                    intendedEventType,
+
                 ExpiresAtUtc =
                     now.Add(TokenLifetime),
 
@@ -458,6 +496,38 @@ public sealed class BiometricVerificationsController
 
         await _dbContext.SaveChangesAsync(
             cancellationToken);
+    }
+
+    private static bool TryParseAttendanceAction(
+        string value,
+        out AttendanceEventType eventType)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case "clockin":
+            case "clock-in":
+                eventType = AttendanceEventType.ClockIn;
+                return true;
+
+            case "breakstart":
+            case "break-start":
+                eventType = AttendanceEventType.BreakStart;
+                return true;
+
+            case "breakend":
+            case "break-end":
+                eventType = AttendanceEventType.BreakEnd;
+                return true;
+
+            case "clockout":
+            case "clock-out":
+                eventType = AttendanceEventType.ClockOut;
+                return true;
+
+            default:
+                eventType = default;
+                return false;
+        }
     }
 
     private Guid? GetAuthenticatedEmployeeId()

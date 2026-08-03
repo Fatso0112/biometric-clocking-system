@@ -186,8 +186,8 @@ export default function Profile() {
           />
           <ListItem
             icon={<Fingerprint className="h-7 w-7" strokeWidth={1.5} />}
-            title="UPDATE BIOMETRICS"
-            subtitle="Update your fingerprint / face"
+            title="MANAGE DEVICE BIOMETRICS"
+            subtitle="Register or remove trusted devices"
             onClick={() => navigate('/update-biometrics', { state: { from: profileFrom } })}
             compactOnDesktop
           />
