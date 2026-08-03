@@ -1,5 +1,23 @@
 $ErrorActionPreference = "Stop"
 
+function Invoke-CheckedCommand {
+    param(
+        [Parameter(Mandatory)]
+        [scriptblock]$Command,
+
+        [Parameter(Mandatory)]
+        [string]$FailureMessage
+    )
+
+    & $Command
+
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -ne 0) {
+        throw "$FailureMessage Exit code: $exitCode"
+    }
+}
+
 $root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "Checking for commonly committed secret files..."
@@ -67,9 +85,17 @@ if ($credentialMatches) {
 Write-Host "Building and testing frontend..."
 Push-Location "$root\web"
 try {
-    npm ci
-    npm test
-    npm run build
+    Invoke-CheckedCommand `
+        -Command { npm ci } `
+        -FailureMessage "Frontend dependency installation failed."
+
+    Invoke-CheckedCommand `
+        -Command { npm test } `
+        -FailureMessage "Frontend tests failed."
+
+    Invoke-CheckedCommand `
+        -Command { npm run build } `
+        -FailureMessage "Frontend production build failed."
 }
 finally {
     Pop-Location
@@ -78,9 +104,27 @@ finally {
 Write-Host "Building and testing backend..."
 Push-Location $root
 try {
-    dotnet restore ClockingManagement.sln
-    dotnet build ClockingManagement.sln --configuration Release --no-restore
-    dotnet test ClockingManagement.sln --configuration Release --no-build
+    Invoke-CheckedCommand `
+        -Command {
+            dotnet restore ClockingManagement.sln
+        } `
+        -FailureMessage "Backend restore failed."
+
+    Invoke-CheckedCommand `
+        -Command {
+            dotnet build ClockingManagement.sln `
+                --configuration Release `
+                --no-restore
+        } `
+        -FailureMessage "Backend build failed."
+
+    Invoke-CheckedCommand `
+        -Command {
+            dotnet test ClockingManagement.sln `
+                --configuration Release `
+                --no-build
+        } `
+        -FailureMessage "Backend tests failed."
 }
 finally {
     Pop-Location

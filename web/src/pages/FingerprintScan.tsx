@@ -278,6 +278,7 @@ export default function FingerprintScan() {
 
         const verification = await verifyMockBiometric(
           employeeNumber,
+          clockingFlow.intendedAction,
           accessToken,
         );
         const event = await recordLiveAttendance(

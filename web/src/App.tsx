@@ -10,6 +10,7 @@ import AttendanceSummary from './pages/AttendanceSummary';
 import ClockInOut from './pages/ClockInOut';
 import ConfirmationScreen from './pages/ConfirmationScreen';
 import Dashboard from './pages/Dashboard';
+import DeviceBiometric from './pages/DeviceBiometric';
 import FaceScan from './pages/FaceScan';
 import FingerprintScan from './pages/FingerprintScan';
 import ForgotPassword from './pages/ForgotPassword';
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="/clock" element={<ClockInOut />} />
           <Route path="/location-check" element={<LocationCheck />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/scan/device" element={<DeviceBiometric />} />
           <Route path="/scan/fingerprint" element={<FingerprintScan />} />
           <Route path="/scan/face" element={<FaceScan />} />
           <Route path="/clock-in-confirmation" element={<ConfirmationScreen variant="clockIn" />} />

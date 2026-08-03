@@ -1,7 +1,7 @@
 import { ApiError, apiRequest } from './httpClient';
 
 export interface BiometricVerificationResponse {
-  verificationSessionId: string;
+  sessionId: string;
   employeeId: string;
   employeeNumber: string;
   employeeName: string;
@@ -18,6 +18,7 @@ const ENROLMENT_REQUIRED_ERROR_CODES = new Set([
   'FINGERPRINT_NOT_ENROLLED',
   'BIOMETRIC_PROFILE_NOT_ENROLLED',
   'BIOMETRIC_PROFILE_DISABLED',
+  'DEVICE_BIOMETRIC_NOT_ENROLLED',
 ]);
 
 export function isBiometricEnrolmentRequired(
@@ -36,6 +37,7 @@ export function isBiometricEnrolmentRequired(
 
 export async function verifyMockBiometric(
   employeeNumber: string,
+  attendanceAction: string,
   accessToken: string,
 ): Promise<BiometricVerificationResponse> {
   return apiRequest<BiometricVerificationResponse>(
@@ -44,6 +46,7 @@ export async function verifyMockBiometric(
       method: 'POST',
       body: JSON.stringify({
         employeeNumber: employeeNumber.trim(),
+        attendanceAction,
       }),
     },
     accessToken,

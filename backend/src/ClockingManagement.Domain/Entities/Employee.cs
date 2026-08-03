@@ -46,4 +46,12 @@ public sealed class Employee
     public ICollection<BiometricRecognitionAttempt>
         BiometricRecognitionAttempts { get; set; } =
             new List<BiometricRecognitionAttempt>();
+
+    public ICollection<WebAuthnCredential>
+        WebAuthnCredentials { get; set; } =
+            new List<WebAuthnCredential>();
+
+    public ICollection<WebAuthnChallenge>
+        WebAuthnChallenges { get; set; } =
+            new List<WebAuthnChallenge>();
 }

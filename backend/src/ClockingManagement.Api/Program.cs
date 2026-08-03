@@ -13,6 +13,7 @@ using ClockingManagement.Infrastructure.Identity;
 using ClockingManagement.Infrastructure.LocationSecurity;
 using ClockingManagement.Infrastructure.Persistence;
 using ClockingManagement.Infrastructure.Time;
+using Fido2NetLib;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
@@ -527,6 +528,63 @@ if (
     throw new InvalidOperationException(
         "At least one production frontend origin must be configured in Cors:AllowedOrigins.");
 }
+
+var webAuthnRpId =
+    builder.Configuration["WebAuthn:RpId"]?.Trim();
+
+if (
+    builder.Environment.IsDevelopment() &&
+    string.IsNullOrWhiteSpace(webAuthnRpId))
+{
+    webAuthnRpId = "localhost";
+}
+
+if (string.IsNullOrWhiteSpace(webAuthnRpId))
+{
+    throw new InvalidOperationException(
+        "WebAuthn:RpId must be configured for device biometric verification.");
+}
+
+var webAuthnOrigins =
+    builder.Configuration
+        .GetSection("WebAuthn:AllowedOrigins")
+        .Get<string[]>()
+        ?.Where(origin =>
+            !string.IsNullOrWhiteSpace(origin))
+        .Select(origin =>
+            origin.Trim().TrimEnd('/'))
+        .Distinct(StringComparer.Ordinal)
+        .ToArray()
+    ?? Array.Empty<string>();
+
+if (
+    builder.Environment.IsDevelopment() &&
+    webAuthnOrigins.Length == 0)
+{
+    webAuthnOrigins =
+    [
+        "http://localhost:5173"
+    ];
+}
+
+if (webAuthnOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "At least one WebAuthn origin must be configured in WebAuthn:AllowedOrigins.");
+}
+
+builder.Services.AddFido2(
+    options =>
+    {
+        options.ServerDomain = webAuthnRpId;
+        options.ServerName =
+            builder.Configuration["WebAuthn:RpName"]?.Trim()
+            ?? "HR Attendance Management System";
+        options.Origins =
+            new HashSet<string>(
+                webAuthnOrigins,
+                StringComparer.Ordinal);
+    });
 
 builder.Services.AddCors(
     options =>

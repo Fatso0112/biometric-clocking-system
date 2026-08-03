@@ -2,7 +2,7 @@ using ClockingManagement.Domain.Enums;
 
 namespace ClockingManagement.Domain.Entities;
 
-public sealed class BiometricVerificationSession
+public sealed class WebAuthnChallenge
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -10,14 +10,11 @@ public sealed class BiometricVerificationSession
 
     public Employee Employee { get; set; } = null!;
 
-    public string TokenHash { get; set; } = string.Empty;
-
-    public VerificationMethod VerificationMethod { get; set; } =
-        VerificationMethod.MockFace;
-
-    public decimal Confidence { get; set; }
+    public WebAuthnCeremonyType CeremonyType { get; set; }
 
     public AttendanceEventType? IntendedEventType { get; set; }
+
+    public string OptionsJson { get; set; } = string.Empty;
 
     public DateTimeOffset ExpiresAtUtc { get; set; }
 

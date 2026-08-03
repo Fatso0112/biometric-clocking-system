@@ -57,6 +57,14 @@ public sealed class ApplicationDbContext
         BiometricRecognitionAttempts =>
             Set<BiometricRecognitionAttempt>();
 
+    public DbSet<WebAuthnCredential>
+        WebAuthnCredentials =>
+            Set<WebAuthnCredential>();
+
+    public DbSet<WebAuthnChallenge>
+        WebAuthnChallenges =>
+            Set<WebAuthnChallenge>();
+
     protected override void OnModelCreating(
         ModelBuilder modelBuilder)
     {

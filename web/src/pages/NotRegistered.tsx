@@ -1,58 +1,95 @@
 import {
-  CircleHelp,
-  ClipboardList,
+  Fingerprint,
   ShieldCheck,
+  Smartphone,
 } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
+import Button from '../components/Button';
 import Card from '../components/Card';
 import NoticeBanner from '../components/NoticeBanner';
 import ScreenHeader from '../components/ScreenHeader';
-import { getNotRegisteredScanType } from '../types/navigation';
 
 export default function NotRegistered() {
-  const location = useLocation();
-  const scanType = getNotRegisteredScanType(location.state);
+  const navigate = useNavigate();
 
   return (
     <AppShell>
-      <ScreenHeader title="Biometric Not Enrolled" backTo="/clock" />
+      <ScreenHeader
+        title="Device Verification Not Enrolled"
+        backTo="/clock"
+      />
+
       <div className="flex flex-1 flex-col pt-5">
         <div className="flex flex-col items-center text-center">
-          <div className="relative flex h-24 w-24 items-center justify-center">
-            <ClipboardList
-              className="h-[72px] w-[72px] text-black"
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-light-grey">
+            <Smartphone
+              className="h-12 w-12 text-black"
               strokeWidth={1.5}
               aria-hidden="true"
             />
-            <span className="absolute bottom-2 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-black text-white">
-              <CircleHelp
-                className="h-6 w-6"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-            </span>
           </div>
-          <h1 className="mt-3 text-lg font-semibold">
-            No active {scanType} enrolment
+
+          <h1 className="mt-4 text-lg font-semibold">
+            Register this phone first
           </h1>
-          <p className="mt-2 max-w-[320px] text-sm leading-[1.6] text-dark-grey">
-            Your account is linked to an employee record, but the backend does not have an active biometric enrolment for attendance verification.
+
+          <p className="mt-2 max-w-[340px] text-sm leading-[1.6] text-dark-grey">
+            Attendance actions require a registered device
+            credential. Your phone will use its configured
+            face, fingerprint, or secure device verification
+            to unlock that credential.
           </p>
         </div>
 
         <Card className="mt-6 p-5">
-          <h2 className="text-lg font-semibold">What happens next</h2>
-          <p className="mt-2 text-sm leading-6 text-dark-grey">
-            Ask a system administrator to open the Employees page and create an authorised mock face enrolment for MVP testing. Production enrolment must use the organisation’s approved biometric provider.
-          </p>
+          <div className="flex items-start gap-3">
+            <Fingerprint
+              className="mt-0.5 h-6 w-6 shrink-0"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+
+            <div>
+              <h2 className="text-lg font-semibold">
+                One-time device registration
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-dark-grey">
+                Registering creates a public-key credential
+                for this website. The private key and your
+                biometric template remain protected by the
+                phone and are not uploaded to the attendance
+                system.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            className="mt-5"
+            onClick={() =>
+              navigate('/update-biometrics', {
+                state: { from: '/clock' },
+              })
+            }
+          >
+            REGISTER THIS DEVICE
+          </Button>
         </Card>
 
         <NoticeBanner
           className="mt-4"
-          icon={<ShieldCheck className="h-5 w-5" strokeWidth={1.5} />}
+          icon={
+            <ShieldCheck
+              className="h-5 w-5"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          }
         >
-          Employees cannot approve or create their own biometric enrolments.
+          A fresh device verification is required before
+          every clock-in, break action, and clock-out.
         </NoticeBanner>
       </div>
     </AppShell>

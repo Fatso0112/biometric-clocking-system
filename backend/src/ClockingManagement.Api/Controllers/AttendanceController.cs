@@ -867,6 +867,19 @@ public sealed class AttendanceController
             });
         }
 
+        if (verificationSession.IntendedEventType !=
+            requestedEvent)
+        {
+            return Conflict(new
+            {
+                errorCode =
+                    "BIOMETRIC_TOKEN_ACTION_MISMATCH",
+
+                message =
+                    "The biometric verification token was issued for a different attendance action."
+            });
+        }
+
         var locationResult =
             _locationValidator.Validate(
                 employee.WorkLocation,
@@ -1046,8 +1059,38 @@ public sealed class AttendanceController
 
         try
         {
-            verificationSession.UsedAtUtc =
-                now;
+            var claimedVerificationSessionCount =
+                await _dbContext
+                    .BiometricVerificationSessions
+                    .Where(session =>
+                        session.Id ==
+                            verificationSession.Id &&
+                        session.UsedAtUtc == null &&
+                        session.ExpiresAtUtc > now &&
+                        session.IntendedEventType ==
+                            requestedEvent)
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(
+                                session =>
+                                    session.UsedAtUtc,
+                                now),
+                        cancellationToken);
+
+            if (claimedVerificationSessionCount != 1)
+            {
+                await transaction.RollbackAsync(
+                    cancellationToken);
+
+                return Conflict(new
+                {
+                    errorCode =
+                        "BIOMETRIC_TOKEN_UNAVAILABLE",
+
+                    message =
+                        "The biometric verification token is no longer available. Verify your identity again."
+                });
+            }
 
             var attendanceEvent =
                 new AttendanceEvent
