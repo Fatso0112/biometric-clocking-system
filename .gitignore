@@ -78,3 +78,5 @@ logs/
 # -----------------------------
 *.tmp
 *.temp
+
+web/tests/.compiled/

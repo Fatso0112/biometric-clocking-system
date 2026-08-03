@@ -41,10 +41,13 @@ public static class IdentityDataSeeder
                 $"creating role '{roleName}'");
         }
 
-        var administratorSeedingEnabled =
-            environment.IsDevelopment() ||
+        var administratorSeedingExplicitlyEnabled =
             configuration.GetValue<bool>(
                 "SeedAdmin:Enabled");
+
+        var administratorSeedingEnabled =
+            environment.IsDevelopment() ||
+            administratorSeedingExplicitlyEnabled;
 
         if (!administratorSeedingEnabled)
         {
@@ -64,6 +67,12 @@ public static class IdentityDataSeeder
             string.IsNullOrWhiteSpace(
                 administratorPassword))
         {
+            if (administratorSeedingExplicitlyEnabled)
+            {
+                throw new InvalidOperationException(
+                    "SeedAdmin is enabled, but SeedAdmin:Email or SeedAdmin:Password is missing.");
+            }
+
             return;
         }
 
@@ -99,7 +108,7 @@ public static class IdentityDataSeeder
 
             EnsureSucceeded(
                 creationResult,
-                "creating the development administrator");
+                "creating the seed administrator");
         }
 
         if (!await userManager.IsInRoleAsync(

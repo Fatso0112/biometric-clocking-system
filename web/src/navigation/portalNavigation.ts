@@ -5,6 +5,7 @@ export type PortalNavigationIcon =
   | 'dashboard'
   | 'employees'
   | 'departments'
+  | 'locations'
   | 'roles'
   | 'attendance'
   | 'reports'
@@ -25,6 +26,7 @@ const PORTAL_NAVIGATION: Record<PortalRole, readonly PortalNavigationItem[]> = {
     { label: 'Dashboard', path: '/admin/dashboard', icon: 'dashboard' },
     { label: 'Employees', path: '/admin/employees', icon: 'employees' },
     { label: 'Departments', path: '/admin/departments', icon: 'departments' },
+    { label: 'Work Locations', path: '/admin/work-locations', icon: 'locations' },
     { label: 'Role Assignments', path: '/admin/role-assignments', icon: 'roles' },
     { label: 'Payroll', path: '/admin/payroll', icon: 'payroll' },
     { label: 'Reports', path: '/admin/reports', icon: 'reports' },

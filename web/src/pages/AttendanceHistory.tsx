@@ -6,8 +6,7 @@ import Button from '../components/Button';
 import ScreenHeader from '../components/ScreenHeader';
 import { useSession } from '../context/SessionContext';
 import {
-  getAttendanceHistory,
-  getAttendanceSummary,
+  getLiveAttendanceBundle,
   type AttendanceRecord,
   type AttendanceSummary as AttendanceSummaryData,
 } from '../services/attendanceApi';
@@ -27,8 +26,12 @@ function formatStatus(status: AttendanceRecord['status']) {
 
 export default function AttendanceHistory() {
   const location = useLocation();
-  const { staffNumber } = useSession();
-  const resolvedStaffNumber = staffNumber!;
+  const {
+    staffNumber,
+    employeeId,
+    accessToken,
+  } = useSession();
+  const resolvedStaffNumber = staffNumber ?? '—';
   const profileFrom = getProfileOrigin(location.state);
   const rangeOptions = getAttendanceRangeOptions();
   const [selectedRangeId, setSelectedRangeId] = useState(rangeOptions[0].id);
@@ -42,19 +45,38 @@ export default function AttendanceHistory() {
     setRecords(null);
     setSummary(null);
 
-    void Promise.all([
-      getAttendanceHistory(resolvedStaffNumber, selectedRange),
-      getAttendanceSummary(resolvedStaffNumber, selectedRange),
-    ]).then(([nextRecords, nextSummary]) => {
-      if (!active) return;
-      setRecords(nextRecords);
-      setSummary(nextSummary);
-    });
+    if (!employeeId || !accessToken) {
+      setRecords([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    void getLiveAttendanceBundle(
+      employeeId,
+      accessToken,
+      selectedRange,
+    )
+      .then((bundle) => {
+        if (!active) return;
+        setRecords(bundle.records);
+        setSummary(bundle.summary);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRecords([]);
+        setSummary(null);
+      });
 
     return () => {
       active = false;
     };
-  }, [resolvedStaffNumber, selectedRange.from, selectedRange.to]);
+  }, [
+    accessToken,
+    employeeId,
+    selectedRange.from,
+    selectedRange.to,
+  ]);
 
   const handleExport = async () => {
     if (!records || !summary || exporting) return;
@@ -70,6 +92,7 @@ export default function AttendanceHistory() {
           daysAbsent: summary.daysAbsent,
           daysLate: summary.daysLate,
           totalHours: summary.totalHours,
+          calculationNote: summary.calculationNote,
         },
         records,
       });

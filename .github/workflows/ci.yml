@@ -1,0 +1,43 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      VITE_API_BASE_URL: http://127.0.0.1:5000
+      VITE_ENABLE_ADMIN_HR_PORTALS: "true"
+      VITE_ENABLE_MOCK_BIOMETRIC: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ClockingManagement.sln
+      - run: dotnet build ClockingManagement.sln --configuration Release --no-restore
+      - run: dotnet test ClockingManagement.sln --configuration Release --no-build

@@ -28,6 +28,7 @@ const PortalDashboard = lazy(() => import('./pages/portal/PortalDashboard'));
 const AdminEmployees = lazy(() => import('./pages/admin/AdminEmployees'));
 const AdminEmployeeForm = lazy(() => import('./pages/admin/AdminEmployeeForm'));
 const AdminDepartments = lazy(() => import('./pages/admin/AdminDepartments'));
+const AdminWorkLocations = lazy(() => import('./pages/admin/AdminWorkLocations'));
 const AdminRoleAssignments = lazy(() => import('./pages/admin/AdminRoleAssignments'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
 const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
@@ -60,6 +61,8 @@ export default function App() {
           <Route path="/scan/fingerprint" element={<FingerprintScan />} />
           <Route path="/scan/face" element={<FaceScan />} />
           <Route path="/clock-in-confirmation" element={<ConfirmationScreen variant="clockIn" />} />
+          <Route path="/break-start-confirmation" element={<ConfirmationScreen variant="breakStart" />} />
+          <Route path="/break-end-confirmation" element={<ConfirmationScreen variant="breakEnd" />} />
           <Route path="/clock-out-confirmation" element={<ConfirmationScreen variant="clockOut" />} />
           <Route path="/not-registered" element={<NotRegistered />} />
           <Route path="/profile" element={<Profile />} />
@@ -106,6 +109,7 @@ export default function App() {
               <Route path="employees/new" element={<Suspense fallback={<PortalLoading />}><AdminEmployeeForm /></Suspense>} />
               <Route path="employees/:employeeNumber" element={<Suspense fallback={<PortalLoading />}><AdminEmployeeForm /></Suspense>} />
               <Route path="departments" element={<Suspense fallback={<PortalLoading />}><AdminDepartments /></Suspense>} />
+              <Route path="work-locations" element={<Suspense fallback={<PortalLoading />}><AdminWorkLocations /></Suspense>} />
               <Route path="role-assignments" element={<Suspense fallback={<PortalLoading />}><AdminRoleAssignments /></Suspense>} />
               <Route path="payroll" element={<Suspense fallback={<PortalLoading />}><PortalPayroll role="admin" /></Suspense>} />
               <Route path="reports" element={<Suspense fallback={<PortalLoading />}><PortalReports role="admin" /></Suspense>} />

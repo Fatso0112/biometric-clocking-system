@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -13,7 +12,11 @@ import {
   type EmployeeDirectoryProfile,
   type EmployeeProfile,
 } from '../services/employeeApi';
-import { getItem, removeItem, setItem } from '../services/persistentStore';
+import {
+  getItem,
+  removeItem,
+  setItem,
+} from '../services/persistentStore';
 import { useSession } from './SessionContext';
 
 type EmployeeProfileContextValue = {
@@ -22,32 +25,44 @@ type EmployeeProfileContextValue = {
   removeAvatar: () => void;
 };
 
-type ProfileRequest = {
-  staffNumber: string;
-  promise: Promise<EmployeeDirectoryProfile>;
-};
-
-const EmployeeProfileContext = createContext<EmployeeProfileContextValue | null>(null);
+const EmployeeProfileContext =
+  createContext<EmployeeProfileContextValue | null>(null);
 
 function getAvatarStorageKey(staffNumber: string) {
   return `avatar:v1:${encodeURIComponent(staffNumber)}`;
 }
 
 function getStoredAvatar(staffNumber: string) {
-  const savedAvatar = getItem<unknown>(getAvatarStorageKey(staffNumber), 'local');
-  return typeof savedAvatar === 'string' && savedAvatar.startsWith('data:image/')
+  const savedAvatar = getItem<unknown>(
+    getAvatarStorageKey(staffNumber),
+    'local',
+  );
+
+  return typeof savedAvatar === 'string' &&
+    savedAvatar.startsWith('data:image/')
     ? savedAvatar
     : null;
 }
 
-export function EmployeeProfileProvider({ children }: { children: ReactNode }) {
-  const { staffNumber } = useSession();
-  const [profile, setProfile] = useState<EmployeeProfile | null>(null);
-  const profileRequestRef = useRef<ProfileRequest | null>(null);
+export function EmployeeProfileProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const {
+    staffNumber,
+    employeeId,
+    accessToken,
+    firstName,
+    lastName,
+    email,
+  } = useSession();
+
+  const [profile, setProfile] =
+    useState<EmployeeProfile | null>(null);
 
   useEffect(() => {
-    if (!staffNumber) {
-      profileRequestRef.current = null;
+    if (!employeeId || !accessToken) {
       setProfile(null);
       return;
     }
@@ -55,45 +70,97 @@ export function EmployeeProfileProvider({ children }: { children: ReactNode }) {
     let active = true;
     setProfile(null);
 
-    const existingRequest = profileRequestRef.current;
-    const request =
-      existingRequest?.staffNumber === staffNumber
-        ? existingRequest.promise
-        : getEmployeeProfile(staffNumber);
+    void getEmployeeProfile(accessToken)
+      .then((baseProfile) => {
+        if (!active) return;
 
-    profileRequestRef.current = { staffNumber, promise: request };
+        setProfile({
+          ...baseProfile,
+          avatarUrl: getStoredAvatar(
+            baseProfile.staffNumber,
+          ),
+        });
+      })
+      .catch(() => {
+        if (!active || !staffNumber) return;
 
-    void request.then((baseProfile) => {
-      if (!active) return;
-      setProfile({ ...baseProfile, avatarUrl: getStoredAvatar(staffNumber) });
-    });
+        setProfile({
+          name:
+            `${firstName ?? ''} ${lastName ?? ''}`.trim() ||
+            'Employee',
+          staffNumber,
+          department: '—',
+          position: 'Employee',
+          email: email ?? '—',
+          phone: '—',
+          avatarUrl: getStoredAvatar(staffNumber),
+        });
+      });
 
     return () => {
       active = false;
     };
-  }, [staffNumber]);
+  }, [
+    accessToken,
+    email,
+    employeeId,
+    firstName,
+    lastName,
+    staffNumber,
+  ]);
 
   const updateAvatar = useCallback(
     (dataUrl: string) => {
-      if (!staffNumber) return;
-      setItem(getAvatarStorageKey(staffNumber), dataUrl, 'local');
+      const resolvedStaffNumber =
+        profile?.staffNumber ?? staffNumber;
+
+      if (!resolvedStaffNumber) return;
+
+      setItem(
+        getAvatarStorageKey(resolvedStaffNumber),
+        dataUrl,
+        'local',
+      );
+
       setProfile((currentProfile) =>
-        currentProfile ? { ...currentProfile, avatarUrl: dataUrl } : currentProfile,
+        currentProfile
+          ? {
+              ...currentProfile,
+              avatarUrl: dataUrl,
+            }
+          : currentProfile,
       );
     },
-    [staffNumber],
+    [profile?.staffNumber, staffNumber],
   );
 
   const removeAvatar = useCallback(() => {
-    if (!staffNumber) return;
-    removeItem(getAvatarStorageKey(staffNumber), 'local');
-    setProfile((currentProfile) =>
-      currentProfile ? { ...currentProfile, avatarUrl: null } : currentProfile,
+    const resolvedStaffNumber =
+      profile?.staffNumber ?? staffNumber;
+
+    if (!resolvedStaffNumber) return;
+
+    removeItem(
+      getAvatarStorageKey(resolvedStaffNumber),
+      'local',
     );
-  }, [staffNumber]);
+
+    setProfile((currentProfile) =>
+      currentProfile
+        ? {
+            ...currentProfile,
+            avatarUrl: null,
+          }
+        : currentProfile,
+    );
+  }, [profile?.staffNumber, staffNumber]);
 
   const value = useMemo(
-    () => ({ profile, updateAvatar, removeAvatar }),
+    () => ({
+      profile,
+      updateAvatar,
+      removeAvatar,
+    }),
     [profile, removeAvatar, updateAvatar],
   );
 
@@ -108,7 +175,9 @@ export function useEmployeeProfile() {
   const context = useContext(EmployeeProfileContext);
 
   if (!context) {
-    throw new Error('useEmployeeProfile must be used within an EmployeeProfileProvider.');
+    throw new Error(
+      'useEmployeeProfile must be used within an EmployeeProfileProvider.',
+    );
   }
 
   return context;

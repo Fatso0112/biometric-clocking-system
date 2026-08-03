@@ -14,11 +14,19 @@ import { getAttendanceRangeOptions } from '../utils/attendanceRanges';
 
 export default function AttendanceSummary() {
   const location = useLocation();
-  const { staffNumber } = useSession();
+  const {
+    staffNumber,
+    employeeId,
+    accessToken,
+  } = useSession();
   const currentRange = useMemo(() => getAttendanceRangeOptions()[0], []);
-  const resolvedStaffNumber = staffNumber!;
+  const resolvedStaffNumber = staffNumber ?? '—';
   const profileFrom = getProfileOrigin(location.state);
-  const summary = useAttendanceSummary(resolvedStaffNumber, currentRange);
+  const summary = useAttendanceSummary(
+    employeeId,
+    accessToken,
+    currentRange,
+  );
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {

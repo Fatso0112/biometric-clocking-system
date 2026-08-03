@@ -11,7 +11,7 @@ const HOME_BY_ROLE = {
 
 test('the shared guard rejects unauthenticated direct navigation', () => {
   assert.deepEqual(
-    getRouteAccessDecision({ employeeNumber: null, authorizedRoles: [], activeRole: null }, 'admin'),
+    getRouteAccessDecision({ userId: null, authorizedRoles: [], activeRole: null }, 'admin'),
     { outcome: 'redirect', to: '/' },
   );
 });
@@ -20,7 +20,7 @@ test('the shared guard allows each active role into its own route', () => {
   for (const role of Object.keys(HOME_BY_ROLE)) {
     assert.deepEqual(
       getRouteAccessDecision(
-        { employeeNumber: `${role}-1`, authorizedRoles: [role], activeRole: role },
+        { userId: `${role}-user`, authorizedRoles: [role], activeRole: role },
         role,
       ),
       { outcome: 'allow' },
@@ -35,7 +35,7 @@ test('the shared guard rejects cross-role direct navigation for all four roles',
       assert.deepEqual(
         getRouteAccessDecision(
           {
-            employeeNumber: `${activeRole}-1`,
+            userId: `${activeRole}-user`,
             authorizedRoles: roles,
             activeRole,
           },

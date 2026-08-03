@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using ClockingManagement.Application.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using ClockingManagement.Application.Employees;
@@ -52,6 +53,70 @@ public sealed class EmployeesController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(employees);
+    }
+
+    [HttpGet("me")]
+    [ProducesResponseType(
+        typeof(EmployeeResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EmployeeResponse>> GetMe(
+        CancellationToken cancellationToken)
+    {
+        var employeeIdValue =
+            User.FindFirstValue("employee_id");
+
+        if (!Guid.TryParse(
+                employeeIdValue,
+                out var employeeId))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "EMPLOYEE_ACCOUNT_NOT_LINKED",
+                    message =
+                        "The authenticated account is not linked to an employee record."
+                });
+        }
+
+        var employee = await _dbContext.Employees
+            .AsNoTracking()
+            .Where(item =>
+                item.Id == employeeId)
+            .Select(item => new EmployeeResponse(
+                item.Id,
+                item.EmployeeNumber,
+                item.FirstName,
+                item.LastName,
+                item.FirstName + " " + item.LastName,
+                item.Email,
+                item.PhoneNumber,
+                item.DepartmentId,
+                item.Department.Name,
+                item.WorkLocationId,
+                item.WorkLocation.Name,
+                item.IsActive,
+                item.CreatedAtUtc))
+            .SingleOrDefaultAsync(
+                cancellationToken);
+
+        if (employee is null)
+        {
+            return NotFound(new
+            {
+                errorCode =
+                    "EMPLOYEE_NOT_FOUND",
+                message =
+                    "The linked employee record was not found."
+            });
+        }
+
+        return Ok(employee);
     }
 
     [HttpGet("{id:guid}")]

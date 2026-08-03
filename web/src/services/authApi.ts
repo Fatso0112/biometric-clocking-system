@@ -1,9 +1,34 @@
-import type { AuthenticatedIdentity, UserRole } from '../types/session';
-import { getEmployeeRoles, getPortalDemoSnapshot } from './portalDemoRepository';
+import type {
+  AuthenticatedIdentity,
+  UserRole,
+} from '../types/session';
+import {
+  ApiError,
+  apiRequest,
+} from './httpClient';
 
 export interface AuthenticationRequest {
-  staffNumber: string;
+  email: string;
   password: string;
+}
+
+interface BackendUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  employeeId: string | null;
+  employeeNumber?: string | null;
+  isActive: boolean;
+  roles: string[];
+}
+
+interface BackendAuthenticationResponse {
+  accessToken: string;
+  accessTokenExpiresAtUtc: string;
+  refreshToken: string;
+  refreshTokenExpiresAtUtc: string;
+  user: BackendUser;
 }
 
 export interface AuthenticationSuccessResponse {
@@ -12,7 +37,12 @@ export interface AuthenticationSuccessResponse {
 }
 
 export interface AuthenticationFailureResponse {
-  status: 'not_found' | 'invalid_credentials' | 'inactive';
+  status:
+    | 'invalid_credentials'
+    | 'inactive'
+    | 'unsupported_role'
+    | 'unavailable';
+
   message: string;
 }
 
@@ -20,57 +50,190 @@ export type AuthenticationResponse =
   | AuthenticationSuccessResponse
   | AuthenticationFailureResponse;
 
-const MOCK_DELAY_MS = 500;
-const DEMO_PASSWORD = 'demo123';
-const ROLE_PRIORITY: readonly UserRole[] = ['admin', 'hr', 'supervisor', 'employee'];
+const ROLE_PRIORITY: readonly UserRole[] = [
+  'admin',
+  'hr',
+  'supervisor',
+  'employee',
+];
 
-function wait(duration: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, duration));
+function mapBackendRole(
+  backendRole: string,
+): UserRole | null {
+  switch (backendRole) {
+    case 'SystemAdministrator':
+      return 'admin';
+    case 'HROfficer':
+      return 'hr';
+    case 'Supervisor':
+      return 'supervisor';
+    case 'Employee':
+      return 'employee';
+    default:
+      return null;
+  }
 }
 
-export async function authenticate(
-  request: AuthenticationRequest,
-): Promise<AuthenticationResponse> {
-  // TODO(BACKEND-AUTH): replace only this frontend demo boundary with real authentication.
-  // The eventual backend must validate credentials and return authoritative role assignments.
-  const employeeNumber = request.staffNumber.trim().toUpperCase();
-  await wait(MOCK_DELAY_MS);
-
-  if (request.password !== DEMO_PASSWORD) {
-    return {
-      status: 'invalid_credentials',
-      message: 'Use the frontend demo password shown below the login form.',
-    };
-  }
-
-  const employee = getPortalDemoSnapshot().employees.find(
-    (candidate) => candidate.employeeNumber === employeeNumber,
-  );
-  if (!employee) {
-    return {
-      status: 'not_found',
-      message: 'Employee number was not found. Please check it and try again.',
-    };
-  }
-
-  if (employee.status !== 'active') {
+function mapAuthenticationResponse(
+  response: BackendAuthenticationResponse,
+  preferredRole?: UserRole | null,
+): AuthenticationResponse {
+  if (!response.user.isActive) {
     return {
       status: 'inactive',
-      message: 'This frontend demo account is inactive.',
+      message:
+        'This account is inactive. Contact an administrator.',
     };
   }
 
-  const authorizedRoles = getEmployeeRoles(employeeNumber);
-  const activeRole = ROLE_PRIORITY.find((role) => authorizedRoles.includes(role));
+  const authorizedRoles = Array.from(
+    new Set(
+      response.user.roles
+        .map(mapBackendRole)
+        .filter(
+          (role): role is UserRole =>
+            role !== null,
+        ),
+    ),
+  );
+
+  const activeRole =
+    preferredRole &&
+    authorizedRoles.includes(preferredRole)
+      ? preferredRole
+      : ROLE_PRIORITY.find((role) =>
+          authorizedRoles.includes(role),
+        );
+
   if (!activeRole) {
     return {
-      status: 'not_found',
-      message: 'No active role is assigned to this frontend demo account.',
+      status: 'unsupported_role',
+      message:
+        'This account does not have access to a supported portal.',
     };
   }
 
   return {
     status: 'authenticated',
-    identity: { employeeNumber, authorizedRoles, activeRole },
+    identity: {
+      userId: response.user.id,
+      email: response.user.email,
+      firstName: response.user.firstName,
+      lastName: response.user.lastName,
+      employeeId: response.user.employeeId,
+      employeeNumber:
+        response.user.employeeNumber?.trim() || null,
+      authorizedRoles,
+      activeRole,
+      accessToken: response.accessToken,
+      accessTokenExpiresAtUtc:
+        response.accessTokenExpiresAtUtc,
+      refreshToken: response.refreshToken,
+      refreshTokenExpiresAtUtc:
+        response.refreshTokenExpiresAtUtc,
+    },
   };
+}
+
+function mapApiFailure(
+  error: unknown,
+  invalidCredentialsMessage: string,
+): AuthenticationFailureResponse {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return {
+        status: 'invalid_credentials',
+        message: invalidCredentialsMessage,
+      };
+    }
+
+    if (error.status === 403 || error.status === 423) {
+      return {
+        status: 'inactive',
+        message: error.message,
+      };
+    }
+
+    return {
+      status: 'unavailable',
+      message: error.message,
+    };
+  }
+
+  return {
+    status: 'unavailable',
+    message:
+      'Authentication failed unexpectedly. Please try again.',
+  };
+}
+
+export async function authenticate(
+  request: AuthenticationRequest,
+): Promise<AuthenticationResponse> {
+  try {
+    const response =
+      await apiRequest<BackendAuthenticationResponse>(
+        '/api/v1/auth/login',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            email: request.email.trim(),
+            password: request.password,
+          }),
+        },
+      );
+
+    return mapAuthenticationResponse(response);
+  } catch (error) {
+    return mapApiFailure(
+      error,
+      'The email address or password is incorrect.',
+    );
+  }
+}
+
+export async function refreshAuthentication(
+  refreshToken: string,
+  preferredRole?: UserRole | null,
+): Promise<AuthenticationResponse> {
+  try {
+    const response =
+      await apiRequest<BackendAuthenticationResponse>(
+        '/api/v1/auth/refresh',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            refreshToken,
+          }),
+        },
+      );
+
+    return mapAuthenticationResponse(
+      response,
+      preferredRole,
+    );
+  } catch (error) {
+    return mapApiFailure(
+      error,
+      'Your session has expired. Please log in again.',
+    );
+  }
+}
+
+export async function revokeAuthentication(
+  refreshToken: string,
+): Promise<void> {
+  try {
+    await apiRequest<void>(
+      '/api/v1/auth/logout',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          refreshToken,
+        }),
+      },
+    );
+  } catch {
+    // Local sign-out must still complete when the backend is unavailable.
+  }
 }
