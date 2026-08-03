@@ -4,6 +4,7 @@ using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClockingManagement.Api.Controllers;
@@ -39,6 +40,7 @@ public sealed class AuthController
 
     [AllowAnonymous]
     [HttpPost("login")]
+    [EnableRateLimiting("Login")]
     [ProducesResponseType(
         typeof(AuthenticationResponse),
         StatusCodes.Status200OK)]
@@ -161,11 +163,17 @@ public sealed class AuthController
         await _dbContext.SaveChangesAsync(
             cancellationToken);
 
+        var employeeNumber =
+            await GetEmployeeNumberAsync(
+                user.EmployeeId,
+                cancellationToken);
+
         return Ok(
             CreateAuthenticationResponse(
                 user,
                 roles,
-                tokenPair));
+                tokenPair,
+                employeeNumber));
     }
 
     [AllowAnonymous]
@@ -289,11 +297,17 @@ public sealed class AuthController
         await _dbContext.SaveChangesAsync(
             cancellationToken);
 
+        var employeeNumber =
+            await GetEmployeeNumberAsync(
+                user.EmployeeId,
+                cancellationToken);
+
         return Ok(
             CreateAuthenticationResponse(
                 user,
                 roles,
-                replacementTokenPair));
+                replacementTokenPair,
+                employeeNumber));
     }
 
     [AllowAnonymous]
@@ -342,7 +356,8 @@ public sealed class AuthController
     [ProducesResponseType(
         StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<
-        AuthenticatedUserResponse>> GetMe()
+        AuthenticatedUserResponse>> GetMe(
+        CancellationToken cancellationToken)
     {
         var user =
             await _userManager.GetUserAsync(
@@ -366,10 +381,16 @@ public sealed class AuthController
                 user))
                 .ToArray();
 
+        var employeeNumber =
+            await GetEmployeeNumberAsync(
+                user.EmployeeId,
+                cancellationToken);
+
         return Ok(
             CreateUserResponse(
                 user,
-                roles));
+                roles,
+                employeeNumber));
     }
 
     private RefreshToken
@@ -422,7 +443,8 @@ public sealed class AuthController
         CreateAuthenticationResponse(
             ApplicationUser user,
             IReadOnlyCollection<string> roles,
-            IssuedTokenPair tokenPair)
+            IssuedTokenPair tokenPair,
+            string? employeeNumber)
     {
         return new AuthenticationResponse(
             AccessToken:
@@ -438,13 +460,15 @@ public sealed class AuthController
             User:
                 CreateUserResponse(
                     user,
-                    roles));
+                    roles,
+                    employeeNumber));
     }
 
     private static AuthenticatedUserResponse
         CreateUserResponse(
             ApplicationUser user,
-            IReadOnlyCollection<string> roles)
+            IReadOnlyCollection<string> roles,
+            string? employeeNumber)
     {
         return new AuthenticatedUserResponse(
             Id:
@@ -457,12 +481,33 @@ public sealed class AuthController
                 user.LastName,
             EmployeeId:
                 user.EmployeeId,
+            EmployeeNumber:
+                employeeNumber,
             IsActive:
                 user.IsActive,
             Roles:
                 roles
                     .OrderBy(role => role)
                     .ToArray());
+    }
+
+    private async Task<string?> GetEmployeeNumberAsync(
+        Guid? employeeId,
+        CancellationToken cancellationToken)
+    {
+        if (!employeeId.HasValue)
+        {
+            return null;
+        }
+
+        return await _dbContext.Employees
+            .AsNoTracking()
+            .Where(employee =>
+                employee.Id == employeeId.Value)
+            .Select(employee =>
+                employee.EmployeeNumber)
+            .SingleOrDefaultAsync(
+                cancellationToken);
     }
 
     private string? GetRequestIpAddress()

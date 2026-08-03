@@ -1,46 +1,39 @@
-import { Fingerprint, ScanFace } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { ShieldCheck } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Card from '../components/Card';
-import ListItem from '../components/ListItem';
+import NoticeBanner from '../components/NoticeBanner';
 import ScreenHeader from '../components/ScreenHeader';
 import { getProfileOrigin } from '../types/navigation';
 
 export default function UpdateBiometrics() {
-  const navigate = useNavigate();
   const location = useLocation();
   const profileFrom = getProfileOrigin(location.state);
 
   return (
     <AppShell>
-      <ScreenHeader title="Update Biometrics" backTo="/profile" backState={{ from: profileFrom }} />
+      <ScreenHeader
+        title="Biometric Enrolment"
+        backTo="/profile"
+        backState={{ from: profileFrom }}
+      />
 
-      <Card className="mt-6 p-5">
-        <h2 className="text-lg font-semibold">Update Biometrics</h2>
-        <p className="mt-1 text-sm text-dark-grey">Choose which biometric to update</p>
-        <div className="mt-6 space-y-4">
-          <ListItem
-            icon={<Fingerprint className="h-8 w-8" strokeWidth={1.5} />}
-            title="Fingerprint"
-            subtitle="Update your registered fingerprint"
-            onClick={() =>
-              navigate('/scan/fingerprint', {
-                state: { mode: 'enroll', enrollmentSource: 'profile', from: profileFrom },
-              })
-            }
-          />
-          <ListItem
-            icon={<ScanFace className="h-8 w-8" strokeWidth={1.5} />}
-            title="Face Recognition"
-            subtitle="Update your registered face"
-            onClick={() =>
-              navigate('/scan/face', {
-                state: { mode: 'enroll', enrollmentSource: 'profile', from: profileFrom },
-              })
-            }
-          />
+      <Card className="mt-6 p-5 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-light-grey">
+          <ShieldCheck className="h-10 w-10" strokeWidth={1.5} />
         </div>
+        <h1 className="mt-5 text-xl font-bold">Administrator-managed enrolment</h1>
+        <p className="mt-3 text-sm leading-6 text-dark-grey">
+          Employees cannot create or replace biometric enrolments from this MVP client. Contact HR or a system administrator.
+        </p>
       </Card>
+
+      <NoticeBanner
+        className="mt-4"
+        icon={<ShieldCheck className="h-5 w-5" strokeWidth={1.5} />}
+      >
+        The hosted MVP uses an explicitly labelled mock biometric provider. Real face or fingerprint enrolment requires an approved production provider and device process.
+      </NoticeBanner>
     </AppShell>
   );
 }

@@ -9,6 +9,7 @@ using ClockingManagement.Domain.Entities;
 using ClockingManagement.Domain.Enums;
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClockingManagement.Api.Controllers;
@@ -57,6 +58,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("clock-in")]
+    [EnableRateLimiting("Attendance")]
     [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> ClockIn(
@@ -70,6 +72,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("break/start")]
+    [EnableRateLimiting("Attendance")]
     [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> StartBreak(
@@ -83,6 +86,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("break/end")]
+    [EnableRateLimiting("Attendance")]
     [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> EndBreak(
@@ -96,6 +100,7 @@ public sealed class AttendanceController
     }
 
     [HttpPost("clock-out")]
+    [EnableRateLimiting("Attendance")]
     [Authorize(Roles = ApplicationRoles.Employee)]
     public Task<ActionResult<
         AttendanceEventResponse>> ClockOut(
@@ -246,6 +251,48 @@ public sealed class AttendanceController
                 latestEvent?.CapturedAtUtc);
 
         return Ok(response);
+    }
+
+    [HttpGet("history/me")]
+    [Authorize(Roles = ApplicationRoles.Employee)]
+    public async Task<ActionResult<
+        IReadOnlyCollection<
+            AttendanceEventResponse>>> GetMyHistory(
+        [FromQuery] int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        var employeeId =
+            GetAuthenticatedEmployeeId();
+
+        if (!employeeId.HasValue)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new
+                {
+                    errorCode =
+                        "EMPLOYEE_ACCOUNT_NOT_LINKED",
+                    message =
+                        "The authenticated account is not linked to an employee record."
+                });
+        }
+
+        limit = Math.Clamp(limit, 1, 1000);
+
+        var items = await _dbContext.AttendanceEvents
+            .AsNoTracking()
+            .Include(item => item.Employee)
+            .Where(item =>
+                item.EmployeeId == employeeId.Value)
+            .OrderByDescending(item =>
+                item.CapturedAtUtc)
+            .ThenByDescending(item =>
+                item.CreatedAtUtc)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return Ok(
+            items.Select(ToResponse).ToList());
     }
 
     [HttpGet("history")]

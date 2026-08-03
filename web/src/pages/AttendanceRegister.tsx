@@ -14,10 +14,17 @@ import { getAttendanceRangeOptions } from '../utils/attendanceRanges';
 export default function AttendanceRegister() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { staffNumber } = useSession();
+  const {
+    employeeId,
+    accessToken,
+  } = useSession();
   const profileFrom = getProfileOrigin(location.state);
   const currentRange = useMemo(() => getAttendanceRangeOptions()[0], []);
-  const summary = useAttendanceSummary(staffNumber!, currentRange);
+  const summary = useAttendanceSummary(
+    employeeId,
+    accessToken,
+    currentRange,
+  );
 
   return (
     <AppShell>

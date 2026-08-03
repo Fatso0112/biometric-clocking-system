@@ -1,18 +1,24 @@
-import { Calendar, Check, Clock3, Sparkles, Timer, User } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  Calendar,
+  Check,
+  Clock3,
+  Coffee,
+  Sparkles,
+  Timer,
+  User,
+} from 'lucide-react';
+import { useEffect, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Button from '../components/Button';
 import Card from '../components/Card';
-import { useSession } from '../context/SessionContext';
 import { useLogout } from '../hooks/useLogout';
 import {
-  recordAttendanceClockIn,
-  recordAttendanceClockOut,
-} from '../services/attendanceApi';
-import { formatElapsedDuration } from '../utils/attendanceDuration';
+  getAttendanceConfirmationState,
+  type IntendedClockAction,
+} from '../types/navigation';
 
-type ConfirmationVariant = 'clockIn' | 'clockOut';
+type ConfirmationVariant = IntendedClockAction;
 
 type ConfirmationScreenProps = {
   variant: ConfirmationVariant;
@@ -28,14 +34,28 @@ type DetailRowProps = {
 const variantContent = {
   clockIn: {
     heading: 'Clocked In Successfully!',
-    subtext: 'You have successfully clocked in.',
-    buttonLabel: 'BACK TO CLOCK IN / OUT',
+    subtext: 'Your clock-in was recorded by the backend.',
+    buttonLabel: 'BACK TO ATTENDANCE',
     circleClassName: 'bg-[#DCFCE7]',
     accentClassName: 'text-[#16A34A]',
   },
+  breakStart: {
+    heading: 'Break Started!',
+    subtext: 'Your lunch break has started.',
+    buttonLabel: 'BACK TO ATTENDANCE',
+    circleClassName: 'bg-[#FEF3C7]',
+    accentClassName: 'text-[#D97706]',
+  },
+  breakEnd: {
+    heading: 'Break Ended!',
+    subtext: 'You are now marked as working again.',
+    buttonLabel: 'BACK TO ATTENDANCE',
+    circleClassName: 'bg-[#DBEAFE]',
+    accentClassName: 'text-[#2563EB]',
+  },
   clockOut: {
     heading: 'Clocked Out Successfully!',
-    subtext: 'You have successfully clocked out.',
+    subtext: 'Your work day has been completed.',
     buttonLabel: 'LOGOUT',
     circleClassName: 'bg-[#FCE7F3]',
     accentClassName: 'text-[#E11D48]',
@@ -51,16 +71,31 @@ function formatDate(date: Date) {
 }
 
 function formatTime(date: Date) {
-  return date.toLocaleTimeString('en-US', {
+  return date.toLocaleTimeString('en-ZA', {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: true,
   });
 }
 
-function DetailRow({ icon, label, value, showDivider = true }: DetailRowProps) {
+function formatMinutes(minutes: number) {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const remaining = safeMinutes % 60;
+  return hours > 0 ? `${hours}h ${remaining}m` : `${remaining} min`;
+}
+
+function DetailRow({
+  icon,
+  label,
+  value,
+  showDivider = true,
+}: DetailRowProps) {
   return (
-    <div className={`flex items-center gap-3 py-3 ${showDivider ? 'border-b border-light-grey' : ''}`}>
+    <div
+      className={`flex items-center gap-3 py-3 ${
+        showDivider ? 'border-b border-light-grey' : ''
+      }`}
+    >
       <span
         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-card bg-cream-white text-black"
         aria-hidden="true"
@@ -69,64 +104,45 @@ function DetailRow({ icon, label, value, showDivider = true }: DetailRowProps) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-xs text-dark-grey">{label}</span>
-        <span className="mt-1 block text-sm font-bold text-black">{value}</span>
+        <span className="mt-1 block text-sm font-bold text-black">
+          {value}
+        </span>
       </span>
     </div>
   );
 }
 
-export default function ConfirmationScreen({ variant }: ConfirmationScreenProps) {
+export default function ConfirmationScreen({
+  variant,
+}: ConfirmationScreenProps) {
   const navigate = useNavigate();
-  const {
-    staffNumber,
-    clockInTime,
-    recordClockIn,
-    recordClockOut,
-    showClockOutGuardMessage,
-  } = useSession();
+  const location = useLocation();
   const logout = useLogout();
-  const [occurredAt] = useState(() => new Date());
-  const [hoursWorked, setHoursWorked] = useState<string | null>(null);
-  const clockInTimeOnEntry = useRef(clockInTime).current;
-  const canClockOutOnEntry = variant !== 'clockOut' || clockInTimeOnEntry !== null;
+  const confirmation = getAttendanceConfirmationState(location.state);
   const content = variantContent[variant];
 
   useEffect(() => {
-    if (variant === 'clockIn') {
-      const recordedClockInTime = recordAttendanceClockIn(staffNumber!, occurredAt);
-      recordClockIn(recordedClockInTime);
-      return;
-    }
-
-    if (!canClockOutOnEntry) {
-      showClockOutGuardMessage();
+    if (!confirmation || confirmation.intendedAction !== variant) {
       navigate('/clock', { replace: true });
-      return;
     }
+  }, [confirmation, navigate, variant]);
 
-    const completedEvent = recordAttendanceClockOut(staffNumber!, clockInTimeOnEntry!, occurredAt);
-    if (completedEvent?.timeIn && completedEvent.timeOut) {
-      setHoursWorked(formatElapsedDuration(completedEvent.timeIn, completedEvent.timeOut));
-    }
-    // Clear only the active shift; the completed attendance event remains persisted independently of logout.
-    recordClockOut();
-  }, [canClockOutOnEntry, clockInTimeOnEntry, navigate, occurredAt, recordClockIn, recordClockOut, showClockOutGuardMessage, staffNumber, variant]);
+  if (!confirmation || confirmation.intendedAction !== variant) {
+    return null;
+  }
 
-  if (variant === 'clockOut' && !canClockOutOnEntry) return null;
-
-  const handlePrimaryAction = () => {
-    if (variant === 'clockIn') {
-      navigate('/clock');
-      return;
-    }
-
-    logout();
-  };
+  const occurredAt = new Date(confirmation.event.capturedAtUtc);
+  const safeOccurredAt = Number.isNaN(occurredAt.getTime())
+    ? new Date()
+    : occurredAt;
 
   return (
     <AppShell className="justify-center py-6">
       <div className="flex w-full flex-col items-center text-center">
-        <div className={`relative flex h-28 w-28 items-center justify-center ${content.accentClassName}`} aria-hidden="true">
+        <div
+          className={`relative flex h-28 w-28 items-center justify-center ${content.accentClassName}`}
+          aria-hidden="true"
+        >
           <Sparkles className="absolute left-0 top-2 h-5 w-5 opacity-50" strokeWidth={1.5} />
           <Sparkles className="absolute bottom-1 right-0 h-4 w-4 opacity-50" strokeWidth={1.5} />
           <div className={`flex h-20 w-20 items-center justify-center rounded-full ${content.circleClassName}`}>
@@ -134,37 +150,52 @@ export default function ConfirmationScreen({ variant }: ConfirmationScreenProps)
           </div>
         </div>
 
-        <h1 className="mt-5 max-w-[330px] text-2xl font-bold leading-tight">{content.heading}</h1>
-        <p className="mt-2 text-sm text-dark-grey">{content.subtext}</p>
+        <h1 className="mt-5 max-w-[330px] text-2xl font-bold leading-tight">
+          {content.heading}
+        </h1>
+        <p className="mt-2 text-sm text-dark-grey">
+          {confirmation.event.message || content.subtext}
+        </p>
 
         <Card className="mt-7 w-full px-5 py-2 text-left">
           <DetailRow
             icon={<User className="h-6 w-6" strokeWidth={1.5} />}
             label="Employee Number"
-            value={staffNumber!}
+            value={confirmation.event.employeeNumber}
           />
           <DetailRow
             icon={<Calendar className="h-6 w-6" strokeWidth={1.5} />}
             label="Date"
-            value={formatDate(occurredAt)}
+            value={formatDate(safeOccurredAt)}
           />
           <DetailRow
             icon={<Clock3 className="h-6 w-6" strokeWidth={1.5} />}
             label="Time"
-            value={formatTime(occurredAt)}
-            showDivider={variant === 'clockOut'}
+            value={formatTime(safeOccurredAt)}
           />
-          {variant === 'clockOut' ? (
-            <DetailRow
-              icon={<Timer className="h-6 w-6" strokeWidth={1.5} />}
-              label="Hours Worked"
-              value={hoursWorked ?? '—'}
-              showDivider={false}
-            />
-          ) : null}
+          <DetailRow
+            icon={<Timer className="h-6 w-6" strokeWidth={1.5} />}
+            label="Worked Time"
+            value={formatMinutes(confirmation.summary.workedDurationMinutes)}
+          />
+          <DetailRow
+            icon={<Coffee className="h-6 w-6" strokeWidth={1.5} />}
+            label="Break Time"
+            value={formatMinutes(confirmation.summary.lunchDurationMinutes)}
+            showDivider={false}
+          />
         </Card>
 
-        <Button onClick={handlePrimaryAction} className="mt-6">
+        <Button
+          className="mt-7"
+          onClick={() => {
+            if (variant === 'clockOut') {
+              logout();
+            } else {
+              navigate('/clock', { replace: true });
+            }
+          }}
+        >
           {content.buttonLabel}
         </Button>
       </div>

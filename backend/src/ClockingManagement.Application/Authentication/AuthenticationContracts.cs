@@ -28,6 +28,7 @@ public sealed record AuthenticatedUserResponse(
     string FirstName,
     string LastName,
     Guid? EmployeeId,
+    string? EmployeeNumber,
     bool IsActive,
     IReadOnlyCollection<string> Roles);
 

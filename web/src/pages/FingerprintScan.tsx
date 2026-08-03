@@ -3,10 +3,16 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Button from '../components/Button';
+import NoticeBanner from '../components/NoticeBanner';
 import ScreenHeader from '../components/ScreenHeader';
 import SecurityFooter from '../components/SecurityFooter';
 import { useSession } from '../context/SessionContext';
 import { useLogout } from '../hooks/useLogout';
+import { getTodayAttendance, recordLiveAttendance } from '../services/attendanceApi';
+import {
+  isBiometricEnrolmentRequired,
+  verifyMockBiometric,
+} from '../services/biometricVerificationApi';
 import {
   getAssertionOptions,
   getDevTestCredentialOptions,
@@ -23,6 +29,8 @@ import {
 import {
   getBiometricEnrollmentSource,
   getBiometricScanMode,
+  getClockingFlowNavigationState,
+  getConfirmationPath,
   getProfileOrigin,
   REGISTRATION_REQUEST_SUBMITTED_MESSAGE,
 } from '../types/navigation';
@@ -110,14 +118,17 @@ function getDevCredentialLabel(status: DevCredentialStatus) {
 export default function FingerprintScan() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { staffNumber } = useSession();
+  const { staffNumber, employeeId, accessToken } = useSession();
   const logout = useLogout();
   const mode = getBiometricScanMode(location.state);
   const enrollmentSource = getBiometricEnrollmentSource(location.state);
   const profileFrom = getProfileOrigin(location.state);
+  const clockingFlow = getClockingFlowNavigationState(location.state);
   const isRegistrationEnrollment = mode === 'enroll' && enrollmentSource === 'registration';
   const [state, dispatch] = useReducer(fingerprintScanReducer, initialFingerprintScanState);
   const [devCredentialStatus, setDevCredentialStatus] = useState<DevCredentialStatus>('idle');
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [confirmationState, setConfirmationState] = useState<unknown>(null);
   const mountedRef = useRef(true);
   const requestInFlightRef = useRef(false);
   const requestControllerRef = useRef<AbortController | null>(null);
@@ -158,6 +169,12 @@ export default function FingerprintScan() {
   }, [mode]);
 
   useEffect(() => {
+    if (mode === 'verify' && !clockingFlow) {
+      navigate('/clock', { replace: true });
+    }
+  }, [clockingFlow, mode, navigate]);
+
+  useEffect(() => {
     if (state.status !== 'success') return;
     const redirectTimer = window.setTimeout(() => {
       if (mode === 'enroll') {
@@ -173,10 +190,27 @@ export default function FingerprintScan() {
         return;
       }
 
-      navigate('/clock-in-confirmation', { replace: true });
-    }, 1500);
+      if (!clockingFlow || !confirmationState) {
+        navigate('/clock', { replace: true });
+        return;
+      }
+
+      navigate(getConfirmationPath(clockingFlow.intendedAction), {
+        replace: true,
+        state: confirmationState,
+      });
+    }, 1200);
     return () => window.clearTimeout(redirectTimer);
-  }, [isRegistrationEnrollment, logout, mode, navigate, profileFrom, state.status]);
+  }, [
+    clockingFlow,
+    confirmationState,
+    isRegistrationEnrollment,
+    logout,
+    mode,
+    navigate,
+    profileFrom,
+    state.status,
+  ]);
 
   useEffect(() => {
     if (mode === 'verify' && state.status === 'maxAttemptsReached') {
@@ -186,6 +220,7 @@ export default function FingerprintScan() {
 
   const handlePrimaryAction = async () => {
     if (canRetry) {
+      setSubmissionError(null);
       dispatch({ type: 'RETRY' });
       return;
     }
@@ -228,6 +263,40 @@ export default function FingerprintScan() {
       if (!mountedRef.current) return;
 
       if (result.status === 'recognised') {
+        if (!clockingFlow || !employeeId || !accessToken) {
+          throw new Error('The authenticated employee clocking session is incomplete.');
+        }
+
+        const employeeNumber =
+          staffNumber ??
+          (
+            await getTodayAttendance(
+              employeeId,
+              accessToken,
+            )
+          ).employeeNumber;
+
+        const verification = await verifyMockBiometric(
+          employeeNumber,
+          accessToken,
+        );
+        const event = await recordLiveAttendance(
+          clockingFlow.intendedAction,
+          {
+            employeeId,
+            verificationToken: verification.verificationToken,
+            location: clockingFlow.locationEvidence,
+          },
+          accessToken,
+        );
+        const summary = await getTodayAttendance(employeeId, accessToken);
+
+        if (!mountedRef.current) return;
+        setConfirmationState({
+          intendedAction: clockingFlow.intendedAction,
+          event,
+          summary,
+        });
         dispatch({ type: 'AUTH_SUCCESS' });
       } else {
         dispatch({
@@ -238,6 +307,23 @@ export default function FingerprintScan() {
       }
     } catch (error) {
       if (!mountedRef.current || controller.signal.aborted) return;
+
+      if (
+        mode === 'verify' &&
+        isBiometricEnrolmentRequired(error)
+      ) {
+        navigate('/not-registered', {
+          replace: true,
+          state: { scanType: 'fingerprint' },
+        });
+        return;
+      }
+
+      setSubmissionError(
+        error instanceof Error
+          ? error.message
+          : 'The attendance event could not be recorded.',
+      );
       dispatch({
         type: 'AUTH_FAILURE',
         status: isUserCancellation(error) ? 'userCancelled' : 'error',
@@ -277,7 +363,7 @@ export default function FingerprintScan() {
     ? { scanType: 'fingerprint' as const }
     : mode === 'enroll'
       ? { from: profileFrom }
-      : undefined;
+      : clockingFlow ?? undefined;
 
   return (
     // Match FaceScan's short-desktop override so the scan action is not pushed below the viewport.
@@ -293,6 +379,15 @@ export default function FingerprintScan() {
               {presentation.heading}
             </h1>
             <p className="mt-2 text-center text-sm text-dark-grey">{presentation.subtext}</p>
+            {submissionError ? (
+              <NoticeBanner
+                className="mt-4 max-w-[330px] text-left"
+                role="alert"
+                icon={<Fingerprint className="h-5 w-5" strokeWidth={1.5} />}
+              >
+                {submissionError}
+              </NoticeBanner>
+            ) : null}
           </div>
           <div
             className={`mt-7 flex aspect-square w-[280px] max-w-full items-center justify-center rounded-full p-[4px] ${

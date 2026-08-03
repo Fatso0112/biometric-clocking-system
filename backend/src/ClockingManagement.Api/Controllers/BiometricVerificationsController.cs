@@ -6,6 +6,7 @@ using ClockingManagement.Domain.Enums;
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClockingManagement.Api.Controllers;
@@ -46,6 +47,7 @@ public sealed class BiometricVerificationsController
     }
 
     [HttpPost("mock")]
+    [EnableRateLimiting("BiometricVerification")]
     [ProducesResponseType(
         typeof(BiometricVerificationResponse),
         StatusCodes.Status200OK)]

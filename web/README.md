@@ -1,29 +1,29 @@
-# HR Attendance Management System
+# Web Client
 
-Pixel-faithful static mobile UI built with React 18, Vite, TypeScript, Tailwind CSS, React Router, and Lucide icons.
+React 18, Vite and TypeScript client for the Biometric Clocking Management System.
 
-## Run locally
+## Commands
 
-```bash
-npm install
+```powershell
+npm ci
 npm run dev
-```
-
-Open `http://127.0.0.1:5173` in a browser.
-
-## Production build
-
-```bash
+npm test
 npm run typecheck
 npm run build
 ```
 
-## Routes
+## Environment
 
-- `/` — Login
-- `/dashboard` — Dashboard
-- `/scan/fingerprint` — Fingerprint scan
-- `/scan/face` — Face recognition scan
-- `/not-registered` — Not in database
+Copy `.env.example` to `.env.local` for local development:
 
-All interactions are local and static. Login and scan buttons only simulate the specified route transitions.
+```text
+VITE_API_BASE_URL=http://localhost:5000
+VITE_ENABLE_ADMIN_HR_PORTALS=true
+VITE_ENABLE_MOCK_BIOMETRIC=true
+```
+
+The mock biometric flag is for MVP testing and must remain clearly labelled. Attendance, identity, location and sequence decisions are validated by the API.
+
+## Hosted build
+
+Vercel configuration is committed in `vercel.json`. Use `web` as the Vercel project root and set the production variables in the Vercel dashboard.

@@ -1,5 +1,6 @@
 import {
   Plus,
+  ScanFace,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -39,6 +40,11 @@ import {
   type DepartmentResponse,
 } from '../../services/departmentsApi';
 import { ApiError } from '../../services/httpClient';
+import {
+  createMockBiometricEnrolment,
+  getBiometricProfile,
+  type BiometricProfileResponse,
+} from '../../services/biometricEnrolmentApi';
 import { Link } from 'react-router-dom';
 
 function getErrorMessage(
@@ -91,6 +97,10 @@ export default function AdminEmployees() {
     UserAccountResponse[]
   >([]);
 
+  const [biometricProfiles, setBiometricProfiles] = useState<
+    Record<string, BiometricProfileResponse | null>
+  >({});
+
   const [query, setQuery] = useState('');
   const [departmentId, setDepartmentId] =
     useState('all');
@@ -102,6 +112,11 @@ export default function AdminEmployees() {
   const [
     updatingUserId,
     setUpdatingUserId,
+  ] = useState<string | null>(null);
+
+  const [
+    enrollingEmployeeId,
+    setEnrollingEmployeeId,
   ] = useState<string | null>(null);
 
   const [message, setMessage] = useState<{
@@ -135,9 +150,22 @@ export default function AdminEmployees() {
           getAllUserAccounts(accessToken),
         ]);
 
+        const profileEntries = await Promise.all(
+          employeeResponse.map(async (employee) => [
+            employee.id,
+            await getBiometricProfile(
+              employee.id,
+              accessToken,
+            ),
+          ] as const),
+        );
+
         setEmployees(employeeResponse);
         setDepartments(departmentResponse);
         setUserAccounts(accountResponse);
+        setBiometricProfiles(
+          Object.fromEntries(profileEntries),
+        );
       } catch (error) {
         setMessage({
           text: getErrorMessage(error),
@@ -282,6 +310,57 @@ export default function AdminEmployees() {
       });
     } finally {
       setUpdatingUserId(null);
+    }
+  }
+
+  async function handleMockBiometricEnrolment(
+    employee: AdminEmployeeResponse,
+  ) {
+    if (!accessToken) {
+      setMessage({
+        text: 'Your login session is unavailable. Please log in again.',
+        error: true,
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Create an active mock face enrolment for ${employee.fullName}? This is for MVP testing only.`,
+    );
+
+    if (!confirmed) return;
+
+    setEnrollingEmployeeId(employee.id);
+    setMessage(null);
+
+    try {
+      await createMockBiometricEnrolment(
+        employee.id,
+        'Face',
+        accessToken,
+      );
+
+      const profile = await getBiometricProfile(
+        employee.id,
+        accessToken,
+      );
+
+      setBiometricProfiles((current) => ({
+        ...current,
+        [employee.id]: profile,
+      }));
+
+      setMessage({
+        text: 'Mock biometric enrolment created. The employee can now test attendance verification.',
+        error: false,
+      });
+    } catch (error) {
+      setMessage({
+        text: getErrorMessage(error),
+        error: true,
+      });
+    } finally {
+      setEnrollingEmployeeId(null);
     }
   }
 
@@ -484,7 +563,10 @@ export default function AdminEmployees() {
                   Login
                 </th>
                 <th className={portalThClass}>
-                  Action
+                  Biometric
+                </th>
+                <th className={portalThClass}>
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -495,6 +577,15 @@ export default function AdminEmployees() {
                   const account =
                     accountByEmployeeId.get(
                       employee.id,
+                    );
+
+                  const biometricProfile =
+                    biometricProfiles[employee.id];
+
+                  const biometricReady =
+                    Boolean(
+                      biometricProfile?.isActive &&
+                      biometricProfile.activeEnrolmentCount > 0,
                     );
 
                   return (
@@ -589,36 +680,76 @@ export default function AdminEmployees() {
                           portalTdClass
                         }
                       >
-                        {account ? (
-                          <PortalActionButton
-                            tone={
-                              account.isActive
-                                ? 'danger'
-                                : 'secondary'
-                            }
-                            className="min-h-10 px-3 text-xs"
-                            disabled={
-                              updatingUserId ===
+                        <PortalStatus
+                          value={
+                            biometricReady
+                              ? 'Active'
+                              : biometricProfile?.isActive === false
+                                ? 'Disabled'
+                                : 'Not enrolled'
+                          }
+                        />
+                      </td>
+
+                      <td
+                        className={
+                          portalTdClass
+                        }
+                      >
+                        <div className="flex min-w-[150px] flex-col gap-2">
+                          {account ? (
+                            <PortalActionButton
+                              tone={
+                                account.isActive
+                                  ? 'danger'
+                                  : 'secondary'
+                              }
+                              className="min-h-10 px-3 text-xs"
+                              disabled={
+                                updatingUserId ===
+                                account.id
+                              }
+                              onClick={() => {
+                                void handleAccountStatusChange(
+                                  account,
+                                );
+                              }}
+                            >
+                              {updatingUserId ===
                               account.id
-                            }
-                            onClick={() => {
-                              void handleAccountStatusChange(
-                                account,
-                              );
-                            }}
-                          >
-                            {updatingUserId ===
-                            account.id
-                              ? 'Saving…'
-                              : account.isActive
-                                ? 'Disable login'
-                                : 'Enable login'}
-                          </PortalActionButton>
-                        ) : (
-                          <span className="text-xs text-dark-grey">
-                            No login account
-                          </span>
-                        )}
+                                ? 'Saving…'
+                                : account.isActive
+                                  ? 'Disable login'
+                                  : 'Enable login'}
+                            </PortalActionButton>
+                          ) : (
+                            <span className="text-xs text-dark-grey">
+                              No login account
+                            </span>
+                          )}
+
+                          {!biometricReady ? (
+                            <PortalActionButton
+                              tone="secondary"
+                              className="min-h-10 px-3 text-xs"
+                              disabled={
+                                enrollingEmployeeId ===
+                                employee.id
+                              }
+                              onClick={() => {
+                                void handleMockBiometricEnrolment(
+                                  employee,
+                                );
+                              }}
+                            >
+                              <ScanFace className="h-4 w-4" />
+                              {enrollingEmployeeId ===
+                              employee.id
+                                ? 'Enrolling…'
+                                : 'Enroll mock face'}
+                            </PortalActionButton>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );

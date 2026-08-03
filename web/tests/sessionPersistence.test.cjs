@@ -37,6 +37,22 @@ class MemoryStorage {
   }
 }
 
+const validSession = {
+  userId: '11111111-1111-1111-1111-111111111111',
+  email: 'employee@example.com',
+  firstName: 'Test',
+  lastName: 'Employee',
+  employeeId: '22222222-2222-2222-2222-222222222222',
+  employeeNumber: 'EMP001',
+  authorizedRoles: ['employee'],
+  activeRole: 'employee',
+  accessToken: 'access-token',
+  accessTokenExpiresAtUtc: '2030-01-01T00:15:00.000Z',
+  refreshToken: 'refresh-token',
+  refreshTokenExpiresAtUtc: '2030-01-08T00:00:00.000Z',
+  clockInTime: null,
+};
+
 beforeEach(() => {
   globalThis.window = {
     localStorage: new MemoryStorage(),
@@ -59,7 +75,7 @@ test('legacy sessions and partner keys are cleared and signal a redirect to logi
   assert.equal(window.sessionStorage.length, 0);
 });
 
-test('malformed session:v3 is cleared and signals a redirect to login', () => {
+test('a malformed current session is cleared and signals reauthentication', () => {
   window.sessionStorage.setItem(`hr-attendance:${SESSION_STORAGE_KEY}`, '{not-json');
 
   const hydrated = hydrateSession();
@@ -68,33 +84,28 @@ test('malformed session:v3 is cleared and signals a redirect to login', () => {
   assert.equal(window.sessionStorage.length, 0);
 });
 
-test('a new authenticated identity is persisted as session:v3 only', () => {
-  persistSession(
-    {
-      employeeNumber: '30001',
-      authorizedRoles: ['employee', 'hr'],
-      activeRole: 'hr',
-      clockInTime: null,
-    },
-    'local',
-  );
+test('a valid authenticated identity is persisted and hydrated as session:v4', () => {
+  persistSession(validSession, 'local');
 
   const raw = window.localStorage.getItem(`hr-attendance:${SESSION_STORAGE_KEY}`);
   assert.ok(raw);
   const persisted = JSON.parse(raw);
 
-  assert.deepEqual(persisted, {
-    version: 3,
-    employeeNumber: '30001',
-    authorizedRoles: ['employee', 'hr'],
-    activeRole: 'hr',
-    clockInTime: null,
-  });
+  assert.equal(persisted.version, 4);
+  assert.equal(persisted.userId, validSession.userId);
+  assert.equal(persisted.employeeNumber, 'EMP001');
+  assert.equal(persisted.accessToken, 'access-token');
   assert.equal('staffNumber' in persisted, false);
   assert.equal(window.sessionStorage.length, 0);
+
+  const hydrated = hydrateSession();
+  assert.equal(hydrated.requiresReauthentication, false);
+  assert.equal(hydrated.storageKind, 'local');
+  assert.equal(hydrated.session.employeeId, validSession.employeeId);
+  assert.deepEqual(hydrated.session.authorizedRoles, ['employee']);
 });
 
-test('logout cleanup removes current and legacy keys from both storage mechanisms', () => {
+test('logout cleanup removes current, legacy and partner keys from both stores', () => {
   for (const storage of [window.localStorage, window.sessionStorage]) {
     storage.setItem(`hr-attendance:${SESSION_STORAGE_KEY}`, '{}');
     storage.setItem('hr-attendance:session:v2', '{}');

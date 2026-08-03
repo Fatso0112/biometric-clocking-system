@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using ClockingManagement.Api.Identity;
 using ClockingManagement.Application.Attendance;
 using ClockingManagement.Application.Authentication;
@@ -15,15 +16,43 @@ using ClockingManagement.Infrastructure.Time;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.HttpOverrides;
 using ClockingManagement.Api.Authentication;
 using Microsoft.OpenApi.Models;
 
 var builder =
     WebApplication.CreateBuilder(args);
 
+var platformPort =
+    Environment.GetEnvironmentVariable("PORT");
+
+if (int.TryParse(platformPort, out var port))
+{
+    builder.WebHost.UseUrls(
+        $"http://0.0.0.0:{port}");
+}
+
+static string GetRateLimitPartitionKey(
+    HttpContext context)
+{
+    var remoteIpAddress =
+        context.Connection.RemoteIpAddress;
+
+    if (remoteIpAddress?.IsIPv4MappedToIPv6 == true)
+    {
+        remoteIpAddress =
+            remoteIpAddress.MapToIPv4();
+    }
+
+    return remoteIpAddress?.ToString() ??
+        "unknown-client";
+}
+
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(
@@ -364,6 +393,64 @@ builder.Services.AddAuthorization(
                     ApplicationRoles.SystemAdministrator));
     });
 
+builder.Services.AddRateLimiter(
+    options =>
+    {
+        options.RejectionStatusCode =
+            StatusCodes.Status429TooManyRequests;
+
+        options.AddPolicy(
+            "Login",
+            context =>
+                RateLimitPartition
+                    .GetFixedWindowLimiter(
+                        GetRateLimitPartitionKey(
+                            context),
+                        _ =>
+                            new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = 5,
+                                Window =
+                                    TimeSpan.FromMinutes(1),
+                                QueueLimit = 0,
+                                AutoReplenishment = true
+                            }));
+
+        options.AddPolicy(
+            "BiometricVerification",
+            context =>
+                RateLimitPartition
+                    .GetFixedWindowLimiter(
+                        GetRateLimitPartitionKey(
+                            context),
+                        _ =>
+                            new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = 10,
+                                Window =
+                                    TimeSpan.FromMinutes(1),
+                                QueueLimit = 0,
+                                AutoReplenishment = true
+                            }));
+
+        options.AddPolicy(
+            "Attendance",
+            context =>
+                RateLimitPartition
+                    .GetFixedWindowLimiter(
+                        GetRateLimitPartitionKey(
+                            context),
+                        _ =>
+                            new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = 10,
+                                Window =
+                                    TimeSpan.FromMinutes(1),
+                                QueueLimit = 0,
+                                AutoReplenishment = true
+                            }));
+    });
+
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>(
@@ -413,7 +500,33 @@ var allowedFrontendOrigins =
     builder.Configuration
         .GetSection("Cors:AllowedOrigins")
         .Get<string[]>()
+        ?.Where(origin =>
+            !string.IsNullOrWhiteSpace(origin))
+        .Select(origin =>
+            origin.Trim().TrimEnd('/'))
+        .Distinct(
+            StringComparer.OrdinalIgnoreCase)
+        .ToArray()
     ?? Array.Empty<string>();
+
+if (
+    builder.Environment.IsDevelopment() &&
+    allowedFrontendOrigins.Length == 0)
+{
+    allowedFrontendOrigins =
+    [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173"
+    ];
+}
+
+if (
+    !builder.Environment.IsDevelopment() &&
+    allowedFrontendOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "At least one production frontend origin must be configured in Cors:AllowedOrigins.");
+}
 
 builder.Services.AddCors(
     options =>
@@ -432,6 +545,14 @@ builder.Services.AddCors(
 
 var app =
     builder.Build();
+
+app.UseForwardedHeaders();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler();
+    app.UseHsts();
+}
 
 await using (var migrationScope =
              app.Services.CreateAsyncScope())
@@ -461,9 +582,16 @@ if (swaggerEnabled)
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Railway terminates TLS at its edge and forwards requests to this HTTP-only
+// container. Redirect only during local development to avoid redirecting the
+// platform readiness probe or creating a proxy redirect loop.
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("FrontendClients");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

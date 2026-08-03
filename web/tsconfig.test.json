@@ -18,7 +18,6 @@
     "src/services/persistentStore.ts",
     "src/services/portalDemoRepository.ts",
     "src/services/sessionPersistence.ts",
-    "src/services/authApi.ts",
     "src/services/teamApi.ts",
     "src/types/canonicalDomain.ts",
     "src/types/navigation.ts",

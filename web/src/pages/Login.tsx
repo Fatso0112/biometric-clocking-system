@@ -186,10 +186,15 @@ export default function Login() {
                 getRoleHomePath(
                   response.identity.activeRole,
                 ),
+                {
+                  replace: true,
+                },
               );
-            } catch {
+            } catch (error) {
               setAuthenticationError(
-                'Login failed unexpectedly. Please try again.',
+                error instanceof Error
+                  ? error.message
+                  : 'Login failed unexpectedly. Please try again.',
               );
             } finally {
               setIsAuthenticating(false);

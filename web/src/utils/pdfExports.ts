@@ -4,7 +4,7 @@ import type { AttendanceRange } from './attendanceRanges';
 
 type AttendanceHistoryPdfSummary = Pick<
   AttendanceSummary,
-  'daysPresent' | 'daysAbsent' | 'totalHours'
+  'daysPresent' | 'daysAbsent' | 'totalHours' | 'calculationNote'
 > &
   Partial<Pick<AttendanceSummary, 'daysLate'>>;
 
@@ -112,7 +112,7 @@ export async function exportAttendanceHistoryPdf({
     },
     {
       label: 'Days Absent',
-      value: String(summary.daysAbsent),
+      value: summary.calculationNote ? 'N/A' : String(summary.daysAbsent),
       fillColor: [252, 231, 243],
       valueColor: [225, 29, 72],
     },
@@ -123,7 +123,7 @@ export async function exportAttendanceHistoryPdf({
   if (summary.daysLate !== undefined) {
     summaryCells.push({
       label: 'Days Late',
-      value: String(summary.daysLate),
+      value: summary.calculationNote ? 'N/A' : String(summary.daysLate),
       fillColor: [254, 243, 199],
       valueColor: [217, 119, 6],
     });
@@ -138,8 +138,23 @@ export async function exportAttendanceHistoryPdf({
 
   const summaryEndY = drawSummaryCells(document, summaryCells, 43);
 
+  let tableStartY = summaryEndY + 7;
+
+  if (summary.calculationNote) {
+    document.setFont('helvetica', 'normal');
+    document.setFontSize(8);
+    document.setTextColor(85, 85, 85);
+    const noteLines = document.splitTextToSize(
+      summary.calculationNote,
+      document.internal.pageSize.getWidth() - 28,
+    );
+    document.text(noteLines, 14, tableStartY);
+    tableStartY += noteLines.length * 4 + 3;
+    document.setTextColor(28, 28, 28);
+  }
+
   autoTable(document, {
-    startY: summaryEndY + 7,
+    startY: tableStartY,
     head: [['Date', 'Day', 'In', 'Out', 'Status', 'Hours']],
     body: records.map((record) => [
       record.date,
@@ -170,10 +185,20 @@ export async function exportAttendanceSummaryPdf({ staffNumber, range, rangeLabe
   document.text(`Date Range: ${rangeLabel}`, 14, 31);
 
   const rows = [
-    ['Days Present', String(summary.daysPresent)],
-    ['Days Absent', String(summary.daysAbsent)],
-    ['Days Late', String(summary.daysLate)],
-    ['Total Working Hours', summary.totalHours],
+    ['Days with Clock-in', String(summary.daysPresent)],
+    [
+      'Days Absent',
+      summary.calculationNote
+        ? 'N/A'
+        : String(summary.daysAbsent),
+    ],
+    [
+      'Days Late',
+      summary.calculationNote
+        ? 'N/A'
+        : String(summary.daysLate),
+    ],
+    ['Recorded Working Hours', summary.totalHours],
   ];
 
   rows.forEach(([label, value], index) => {
@@ -183,6 +208,17 @@ export async function exportAttendanceSummaryPdf({ staffNumber, range, rangeLabe
     document.setFont('helvetica', 'bold');
     document.text(value, 88, y);
   });
+
+  if (summary.calculationNote) {
+    document.setFont('helvetica', 'normal');
+    document.setFontSize(8);
+    document.setTextColor(85, 85, 85);
+    const noteLines = document.splitTextToSize(
+      summary.calculationNote,
+      document.internal.pageSize.getWidth() - 28,
+    );
+    document.text(noteLines, 14, 102);
+  }
 
   document.save(`attendance-summary-${getFileRange(range)}.pdf`);
 }

@@ -8,12 +8,14 @@ import { EmployeeProfileProvider } from './context/EmployeeProfileContext';
 import { SessionProvider } from './context/SessionContext';
 import './index.css';
 
-createRoot(document.getElementById('root')!).render(
+createRoot(
+  document.getElementById('root')!,
+).render(
   <StrictMode>
     <ErrorBoundary>
       <SessionProvider>
         <EmployeeProfileProvider>
-          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <BrowserRouter>
             <ScrollToTop />
             <App />
           </BrowserRouter>

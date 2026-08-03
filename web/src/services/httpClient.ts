@@ -1,4 +1,5 @@
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL } from '../config/api';
+import { requestRefreshedAccessToken } from './authSessionBridge';
 
 export interface IdentityApiError {
   code: string;
@@ -15,11 +16,7 @@ export interface ApiProblem {
 export class ApiError extends Error {
   public readonly status: number;
   public readonly errorCode?: string;
-  public readonly errors?: Record<
-    string,
-    string[]
-  >;
-
+  public readonly errors?: Record<string, string[]>;
   public readonly identityErrors?: IdentityApiError[];
 
   public constructor(
@@ -28,37 +25,46 @@ export class ApiError extends Error {
     problem?: ApiProblem,
   ) {
     super(message);
-
     this.name = 'ApiError';
     this.status = status;
     this.errorCode = problem?.errorCode;
     this.errors = problem?.errors;
-    this.identityErrors =
-      problem?.identityErrors;
+    this.identityErrors = problem?.identityErrors;
   }
 }
 
 function buildUrl(path: string): string {
   const normalizedPath =
-    path.startsWith("/") ? path : `/${path}`;
+    path.startsWith('/') ? path : `/${path}`;
 
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
-export async function apiRequest<T>(
+async function readApiProblem(
+  response: Response,
+): Promise<ApiProblem | undefined> {
+  try {
+    return (await response.json()) as ApiProblem;
+  } catch {
+    return undefined;
+  }
+}
+
+async function executeRequest<T>(
   path: string,
-  options: RequestInit = {},
-  accessToken?: string | null,
+  options: RequestInit,
+  accessToken: string | null | undefined,
+  allowRefresh: boolean,
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (options.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
   if (accessToken) {
     headers.set(
-      "Authorization",
+      'Authorization',
       `Bearer ${accessToken}`,
     );
   }
@@ -73,19 +79,30 @@ export async function apiRequest<T>(
   } catch {
     throw new ApiError(
       0,
-      "The backend could not be reached. Check your connection and API configuration.",
+      'The backend could not be reached. Check your connection and API configuration.',
     );
   }
 
-  if (!response.ok) {
-    let problem: ApiProblem | undefined;
+  if (
+    response.status === 401 &&
+    accessToken &&
+    allowRefresh
+  ) {
+    const refreshedAccessToken =
+      await requestRefreshedAccessToken();
 
-    try {
-      problem =
-        (await response.json()) as ApiProblem;
-    } catch {
-      problem = undefined;
+    if (refreshedAccessToken) {
+      return executeRequest<T>(
+        path,
+        options,
+        refreshedAccessToken,
+        false,
+      );
     }
+  }
+
+  if (!response.ok) {
+    const problem = await readApiProblem(response);
 
     throw new ApiError(
       response.status,
@@ -100,11 +117,24 @@ export async function apiRequest<T>(
   }
 
   const contentType =
-    response.headers.get("content-type") ?? "";
+    response.headers.get('content-type') ?? '';
 
-  if (contentType.includes("application/json")) {
+  if (contentType.includes('application/json')) {
     return (await response.json()) as T;
   }
 
   return (await response.text()) as T;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+  accessToken?: string | null,
+): Promise<T> {
+  return executeRequest<T>(
+    path,
+    options,
+    accessToken,
+    true,
+  );
 }
