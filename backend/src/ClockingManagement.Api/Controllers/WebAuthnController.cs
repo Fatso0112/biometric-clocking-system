@@ -591,7 +591,6 @@ public sealed class WebAuthnController : ControllerBase
                 verificationToken,
                 session.Confidence,
                 session.ExpiresAtUtc,
-                IsMock: false,
                 "Identity verified by the device authenticator."));
         }
         catch (Exception exception)

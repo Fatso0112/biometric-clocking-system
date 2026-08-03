@@ -134,77 +134,74 @@ export default function DeviceBiometric() {
 
   if (!clockingFlow) return null;
 
-    const activeFlow = clockingFlow;
+  const activeFlow = clockingFlow;
 
-    async function handleVerification() {
-      if (!employeeId || !accessToken) {
-        setErrorMessage(
-          'The employee login session is incomplete. Please log in again.',
+  async function handleVerification() {
+    if (!employeeId || !accessToken) {
+      setErrorMessage(
+        'The employee login session is incomplete. Please log in again.',
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const verification =
+        await verifyDeviceForAttendance(
+          activeFlow.intendedAction,
+          accessToken,
         );
+
+      const attendanceEvent =
+        await recordLiveAttendance(
+          activeFlow.intendedAction,
+          {
+            employeeId,
+            verificationToken:
+              verification.verificationToken,
+            location:
+              activeFlow.locationEvidence,
+          },
+          accessToken,
+        );
+
+      const summary =
+        await getTodayAttendance(
+          employeeId,
+          accessToken,
+        );
+
+      navigate(
+        getConfirmationPath(
+          activeFlow.intendedAction,
+        ),
+        {
+          replace: true,
+          state: {
+            intendedAction:
+              activeFlow.intendedAction,
+            event: attendanceEvent,
+            summary,
+          },
+        },
+      );
+    } catch (error) {
+      if (isBiometricEnrolmentRequired(error)) {
+        navigate('/not-registered', {
+          replace: true,
+        });
         return;
       }
 
-      setIsSubmitting(true);
-      setErrorMessage(null);
-
-      try {
-        const verification =
-          await verifyDeviceForAttendance(
-            activeFlow.intendedAction,
-            accessToken,
-          );
-
-        const attendanceEvent =
-          await recordLiveAttendance(
-            activeFlow.intendedAction,
-            {
-              employeeId,
-              verificationToken:
-                verification.verificationToken,
-              location:
-                activeFlow.locationEvidence,
-            },
-            accessToken,
-          );
-
-        const summary =
-          await getTodayAttendance(
-            employeeId,
-            accessToken,
-          );
-
-        navigate(
-          getConfirmationPath(
-            activeFlow.intendedAction,
-          ),
-          {
-            replace: true,
-            state: {
-              intendedAction:
-                activeFlow.intendedAction,
-              event: attendanceEvent,
-              summary,
-            },
-          },
-        );
-      } catch (error) {
-        if (isBiometricEnrolmentRequired(error)) {
-          navigate('/not-registered', {
-            replace: true,
-            state: {
-              scanType: 'fingerprint',
-            },
-          });
-          return;
-        }
-
-        setErrorMessage(
-          getErrorMessage(error),
-        );
-      } finally {
-        setIsSubmitting(false);
-      }
+      setErrorMessage(
+        getErrorMessage(error),
+      );
+    } finally {
+      setIsSubmitting(false);
     }
+  }
 
   return (
     <AppShell>

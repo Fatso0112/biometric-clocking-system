@@ -1,58 +1,57 @@
 # Release Checklist
 
-## Build and source control
+## Source and build
 
-- [ ] `npm ci`, `npm test` and `npm run build` pass in `web`.
-- [ ] `dotnet restore`, `dotnet build` and `dotnet test` pass for `ClockingManagement.sln`.
-- [ ] GitHub Actions is green.
-- [ ] No `.env`, `.env.local`, signing keys, database passwords or tokens are committed.
-- [ ] The previous JWT key has been rotated.
-- [ ] Patch folders, compiled test output, `bin`, `obj`, `dist` and `node_modules` are absent from the commit.
+- [ ] Work is committed on a feature branch and reviewed before merging to `main`.
+- [ ] No `.env`, `.env.local`, secrets, `node_modules`, `dist`, `bin`, `obj`, `.compiled` or test-result folders are committed.
+- [ ] `npm ci`, `npm test`, `npm run typecheck` and `npm run build` pass in `web`.
+- [ ] `dotnet restore`, `dotnet build --configuration Release` and `dotnet test --configuration Release` pass.
+- [ ] The WebAuthn migration is committed and Railway applies it successfully.
 
-## Railway API
+## Production configuration
 
-- [ ] Service root is `backend`.
-- [ ] PostgreSQL connection string is configured.
-- [ ] Production JWT issuer, audience and new signing key are configured.
-- [ ] Exact Vercel origins are configured under `Cors__AllowedOrigins__N`.
-- [ ] `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` is set and proxy/IP behaviour is tested.
-- [ ] `/health/live` returns 200.
-- [ ] `/health/ready` returns 200 and confirms database readiness.
-- [ ] EF Core migrations apply successfully to a clean database.
-- [ ] Swagger is disabled or deliberately restricted in production.
-- [ ] Seed administrator is disabled after initial setup.
+- [ ] Vercel uses the exact Railway API origin.
+- [ ] Railway CORS allows the exact Vercel production origin.
+- [ ] `WebAuthn__RpId` is the stable production hostname only.
+- [ ] `WebAuthn__AllowedOrigins__0` is the exact HTTPS production origin.
+- [ ] The JWT signing key is strong, private and stored only in Railway.
+- [ ] Administrator seeding is disabled after first login.
+- [ ] Swagger is disabled or restricted in Production.
+- [ ] Approved-network checks are enabled only after CIDR and proxy validation.
 
-## Vercel frontend
+## Live data verification
 
-- [ ] Root directory is `web`.
-- [ ] `VITE_API_BASE_URL` uses the Railway HTTPS domain.
-- [ ] SPA refresh works on `/clock`, `/admin/employees` and other direct routes.
-- [ ] Camera and geolocation permissions work over HTTPS.
-- [ ] Mock biometric is clearly labelled and enabled only for the MVP environment.
+- [ ] Employee, department, user, role and work-location pages display PostgreSQL records.
+- [ ] Supervisor, HR and administrator attendance views display backend events.
+- [ ] Reports show only stored attendance data and do not invent absence or lateness.
+- [ ] Empty database states show clear empty-state messages rather than generated records.
+- [ ] Unsupported payroll, settings and audit features are not presented as working pages.
 
-## Application setup
+## Device verification
 
-- [ ] At least one active work location exists with correct coordinates and timezone.
-- [ ] At least one active department exists.
-- [ ] Employee record is active and assigned to the correct location.
-- [ ] User account is linked to the employee and has the `Employee` role.
-- [ ] Employee has an active mock face enrolment.
+- [ ] An employee can register the production phone from the profile page.
+- [ ] Registered devices are listed from the database and can be revoked.
+- [ ] Clock In requires a fresh WebAuthn assertion.
+- [ ] Start Break and End Break require fresh WebAuthn assertions.
+- [ ] Clock Out requires a fresh WebAuthn assertion.
+- [ ] Cancelling the device prompt records no attendance event.
+- [ ] A verification token cannot be reused.
+- [ ] A token issued for one attendance action cannot authorize another action.
+- [ ] An employee cannot register or use another employee's credential.
 
-## Acceptance tests
+## Attendance and security
 
-- [ ] Valid and invalid login.
-- [ ] Session survives refresh.
-- [ ] Access token refresh rotates tokens without losing the active role.
-- [ ] Logout clears the session and revokes the refresh token on a best-effort basis.
-- [ ] Employee cannot access admin or HR routes.
-- [ ] Employee cannot request verification or clock attendance for another employee ID.
-- [ ] Clock In changes status to `Working`.
-- [ ] Start Break changes status to `OnBreak`.
-- [ ] End Break changes status to `Working`.
-- [ ] Clock Out changes status to `Completed`.
-- [ ] Attendance history remains after refresh.
-- [ ] Duplicate and invalid sequence attempts are rejected.
-- [ ] Reused and expired biometric tokens are rejected.
-- [ ] Missing/disabled biometric profile is handled clearly.
-- [ ] Denied GPS, inaccurate GPS, outside-geofence and network-rule failures are handled clearly.
-- [ ] Rate limits return HTTP 429 under repeated abuse.
+- [ ] Full sequence passes: NotPresent → Working → OnBreak → Working → Completed.
+- [ ] Direct-route refresh works on Vercel.
+- [ ] Role guards reject cross-role access.
+- [ ] Invalid login, denied GPS, outside-geofence and invalid-sequence errors are handled.
+- [ ] Logout clears current and legacy session keys.
+- [ ] `/health/ready` returns HTTP 200.
+- [ ] Hosted smoke tests are completed because the current integration-test project may not discover executable tests.
+
+## Legacy cleanup
+
+- [ ] Browser legacy data is cleared by the startup cleanup.
+- [ ] A PostgreSQL backup exists before any destructive cleanup.
+- [ ] `scripts/purge-legacy-mock-data.sql` preview counts have been reviewed.
+- [ ] The one-time database cleanup has been run only when old test attendance should be deleted.

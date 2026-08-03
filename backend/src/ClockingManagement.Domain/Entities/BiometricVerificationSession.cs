@@ -13,7 +13,7 @@ public sealed class BiometricVerificationSession
     public string TokenHash { get; set; } = string.Empty;
 
     public VerificationMethod VerificationMethod { get; set; } =
-        VerificationMethod.MockFace;
+        VerificationMethod.DeviceAuthenticator;
 
     public decimal Confidence { get; set; }
 

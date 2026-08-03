@@ -1,5 +1,5 @@
 import type { AttendanceRecord, AttendanceSummary } from '../services/attendanceApi';
-import type { TeamAttendanceRow } from '../services/teamAttendanceApi';
+import type { EmployeeAttendanceAggregate } from '../services/organisationAttendanceApi';
 import type { AttendanceRange } from './attendanceRanges';
 
 type AttendanceHistoryPdfSummary = Pick<
@@ -24,17 +24,17 @@ type SummaryPdfInput = {
 };
 
 export type TeamAttendanceReportSummary = {
-  referenceDate: string;
   totalMembers: number;
-  presentMembers: number;
-  absentMembers: number;
+  recordedDays: number;
+  completedDays: number;
+  exceptionDays: number;
 };
 
 type TeamAttendanceReportPdfInput = {
   range: AttendanceRange;
   rangeLabel: string;
   summary: TeamAttendanceReportSummary;
-  rows: TeamAttendanceRow[];
+  rows: EmployeeAttendanceAggregate[];
 };
 
 function getFileRange(range: AttendanceRange) {
@@ -241,11 +241,10 @@ export async function exportTeamAttendanceReportPdf({
   document.setFont('helvetica', 'normal');
   document.setFontSize(10);
   document.text(`Date Range: ${rangeLabel}`, 14, 26);
-  document.text(`Snapshot Reference Day: ${summary.referenceDate}`, 14, 32);
 
   document.setFont('helvetica', 'bold');
   document.setFontSize(10);
-  document.text('Team Summary', 14, 40);
+  document.text('Attendance Summary', 14, 34);
   const summaryEndY = drawSummaryCells(
     document,
     [
@@ -256,28 +255,36 @@ export async function exportTeamAttendanceReportPdf({
         valueColor: [28, 28, 28],
       },
       {
-        label: 'Present',
-        value: String(summary.presentMembers),
+        label: 'Recorded Days',
+        value: String(summary.recordedDays),
+        fillColor: [248, 248, 248],
+        valueColor: [28, 28, 28],
+      },
+      {
+        label: 'Completed Days',
+        value: String(summary.completedDays),
         fillColor: [220, 252, 231],
         valueColor: [22, 163, 74],
       },
       {
-        label: 'Absent',
-        value: String(summary.absentMembers),
+        label: 'Open / Invalid',
+        value: String(summary.exceptionDays),
         fillColor: [252, 231, 243],
         valueColor: [225, 29, 72],
       },
     ],
-    44,
+    38,
   );
 
   autoTable(document, {
     startY: summaryEndY + 7,
-    head: [['Employee', 'Present', 'Absent', 'Hours']],
+    head: [['Employee', 'Recorded', 'Completed', 'Open', 'Invalid', 'Hours']],
     body: rows.map((row) => [
-      `${row.employeeName} (${row.employeeId})`,
-      String(row.presentDays),
-      String(row.absentDays),
+      `${row.employeeName} (${row.employeeNumber})`,
+      String(row.recordedDays),
+      String(row.completedDays),
+      String(row.openDays),
+      String(row.invalidDays),
       row.totalHours,
     ]),
     theme: 'grid',

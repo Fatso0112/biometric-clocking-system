@@ -25,3 +25,14 @@ test('only explicit true or 1 values enable portal exposure', () => {
   assert.equal(isEnabledFeatureFlag('1'), true);
   assert.equal(isEnabledFeatureFlag('yes'), false);
 });
+
+test('production navigation exposes only database-backed portal pages', () => {
+  const paths = [
+    ...getPortalNavigationItems('admin', true),
+    ...getPortalNavigationItems('hr', true),
+  ].map((item) => item.path);
+
+  assert.equal(paths.some((path) => path.includes('payroll')), false);
+  assert.equal(paths.some((path) => path.includes('settings')), false);
+  assert.equal(paths.some((path) => path.includes('audit')), false);
+});
