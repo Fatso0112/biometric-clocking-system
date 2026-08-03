@@ -1,10 +1,6 @@
 import type { UserRole } from './session';
 
-export type BiometricScanMode = 'verify' | 'enroll';
-
 export type ProfileOrigin = '/dashboard' | '/clock';
-export type BiometricEnrollmentSource = 'profile' | 'registration';
-export type BiometricScanType = 'fingerprint' | 'face';
 export type IntendedClockAction =
   | 'clockIn'
   | 'breakStart'
@@ -23,21 +19,9 @@ export interface ClockingFlowNavigationState {
   locationEvidence: ClockingLocationEvidence;
 }
 
-export type BiometricScanNavigationState = {
-  mode?: BiometricScanMode;
-  enrollmentSource?: BiometricEnrollmentSource;
-  from?: ProfileOrigin;
-  intendedAction?: IntendedClockAction;
-  locationEvidence?: ClockingLocationEvidence;
-};
-
 export type ProfileNavigationState = {
   biometricUpdateMessage?: string;
   from?: ProfileOrigin;
-};
-
-export type NotRegisteredNavigationState = {
-  scanType?: BiometricScanType;
 };
 
 export type LoginNavigationState = {
@@ -69,9 +53,6 @@ export interface AttendanceConfirmationNavigationState {
   summary: AttendanceConfirmationSummary;
 }
 
-export const REGISTRATION_REQUEST_SUBMITTED_MESSAGE =
-  'Your registration request has been submitted.';
-
 export type RoleHomePath =
   | '/clock'
   | '/supervisor/dashboard'
@@ -91,34 +72,6 @@ export function getRoleHomePath(role: UserRole): RoleHomePath {
   }
 }
 
-export function getBiometricScanMode(state: unknown): BiometricScanMode {
-  if (
-    state &&
-    typeof state === 'object' &&
-    'mode' in state &&
-    state.mode === 'enroll'
-  ) {
-    return 'enroll';
-  }
-
-  return 'verify';
-}
-
-export function getBiometricEnrollmentSource(
-  state: unknown,
-): BiometricEnrollmentSource {
-  if (
-    state &&
-    typeof state === 'object' &&
-    'enrollmentSource' in state &&
-    state.enrollmentSource === 'registration'
-  ) {
-    return 'registration';
-  }
-
-  return 'profile';
-}
-
 export function getProfileOrigin(state: unknown): ProfileOrigin {
   if (
     state &&
@@ -130,21 +83,6 @@ export function getProfileOrigin(state: unknown): ProfileOrigin {
   }
 
   return '/clock';
-}
-
-export function getNotRegisteredScanType(
-  state: unknown,
-): BiometricScanType {
-  if (
-    state &&
-    typeof state === 'object' &&
-    'scanType' in state &&
-    state.scanType === 'fingerprint'
-  ) {
-    return 'fingerprint';
-  }
-
-  return 'face';
 }
 
 export function getIntendedClockAction(

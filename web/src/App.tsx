@@ -11,8 +11,6 @@ import ClockInOut from './pages/ClockInOut';
 import ConfirmationScreen from './pages/ConfirmationScreen';
 import Dashboard from './pages/Dashboard';
 import DeviceBiometric from './pages/DeviceBiometric';
-import FaceScan from './pages/FaceScan';
-import FingerprintScan from './pages/FingerprintScan';
 import ForgotPassword from './pages/ForgotPassword';
 import Login from './pages/Login';
 import LocationCheck from './pages/LocationCheck';
@@ -32,11 +30,8 @@ const AdminDepartments = lazy(() => import('./pages/admin/AdminDepartments'));
 const AdminWorkLocations = lazy(() => import('./pages/admin/AdminWorkLocations'));
 const AdminRoleAssignments = lazy(() => import('./pages/admin/AdminRoleAssignments'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
-const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
 const HrAttendance = lazy(() => import('./pages/hr/HrAttendance'));
-const PortalPayroll = lazy(() => import('./pages/portal/PortalPayroll'));
 const PortalReports = lazy(() => import('./pages/portal/PortalReports'));
-const PortalSettings = lazy(() => import('./pages/portal/PortalSettings'));
 const PortalProfile = lazy(() => import('./pages/portal/PortalProfile'));
 
 function PortalLoading() {
@@ -60,8 +55,6 @@ export default function App() {
           <Route path="/location-check" element={<LocationCheck />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/scan/device" element={<DeviceBiometric />} />
-          <Route path="/scan/fingerprint" element={<FingerprintScan />} />
-          <Route path="/scan/face" element={<FaceScan />} />
           <Route path="/clock-in-confirmation" element={<ConfirmationScreen variant="clockIn" />} />
           <Route path="/break-start-confirmation" element={<ConfirmationScreen variant="breakStart" />} />
           <Route path="/break-end-confirmation" element={<ConfirmationScreen variant="breakEnd" />} />
@@ -113,11 +106,11 @@ export default function App() {
               <Route path="departments" element={<Suspense fallback={<PortalLoading />}><AdminDepartments /></Suspense>} />
               <Route path="work-locations" element={<Suspense fallback={<PortalLoading />}><AdminWorkLocations /></Suspense>} />
               <Route path="role-assignments" element={<Suspense fallback={<PortalLoading />}><AdminRoleAssignments /></Suspense>} />
-              <Route path="payroll" element={<Suspense fallback={<PortalLoading />}><PortalPayroll role="admin" /></Suspense>} />
               <Route path="reports" element={<Suspense fallback={<PortalLoading />}><PortalReports role="admin" /></Suspense>} />
+              <Route path="payroll" element={<Navigate to="/admin/reports" replace />} />
+              <Route path="audit-logs" element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="settings" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="users" element={<Suspense fallback={<PortalLoading />}><AdminUsers /></Suspense>} />
-              <Route path="audit-logs" element={<Suspense fallback={<PortalLoading />}><AdminAuditLogs /></Suspense>} />
-              <Route path="settings" element={<Suspense fallback={<PortalLoading />}><PortalSettings role="admin" /></Suspense>} />
               <Route path="profile" element={<Suspense fallback={<PortalLoading />}><PortalProfile role="admin" /></Suspense>} />
             </Route>
           </Route>
@@ -146,8 +139,8 @@ export default function App() {
               />
               <Route path="attendance" element={<Suspense fallback={<PortalLoading />}><HrAttendance /></Suspense>} />
               <Route path="reports" element={<Suspense fallback={<PortalLoading />}><PortalReports role="hr" /></Suspense>} />
-              <Route path="payroll" element={<Suspense fallback={<PortalLoading />}><PortalPayroll role="hr" /></Suspense>} />
-              <Route path="settings" element={<Suspense fallback={<PortalLoading />}><PortalSettings role="hr" /></Suspense>} />
+              <Route path="payroll" element={<Navigate to="/hr/reports" replace />} />
+              <Route path="settings" element={<Navigate to="/hr/dashboard" replace />} />
               <Route path="profile" element={<Suspense fallback={<PortalLoading />}><PortalProfile role="hr" /></Suspense>} />
             </Route>
           </Route>

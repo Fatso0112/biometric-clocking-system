@@ -13,16 +13,11 @@
     "src/navigation/portalNavigation.ts",
     "src/security/routeAccess.ts",
     "src/services/canonicalDomainAdapters.ts",
-    "src/services/mockScenario.ts",
-    "src/services/mockWorkforce.ts",
     "src/services/persistentStore.ts",
-    "src/services/portalDemoRepository.ts",
     "src/services/sessionPersistence.ts",
-    "src/services/teamApi.ts",
     "src/types/canonicalDomain.ts",
     "src/types/navigation.ts",
-    "src/types/portalDemo.ts",
     "src/types/session.ts",
-    "src/types/workforce.ts"
+    "src/services/productionDataCleanup.ts"
   ]
 }

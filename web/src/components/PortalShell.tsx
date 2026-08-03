@@ -1,18 +1,15 @@
 import {
   Building2,
   CalendarClock,
-  ClipboardList,
   FileBarChart,
   LayoutDashboard,
   LogOut,
   MapPinned,
-  Settings,
   ShieldCheck,
   UserCircle,
   UserCog,
   Users,
   UsersRound,
-  WalletCards,
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
@@ -44,10 +41,7 @@ const NAVIGATION_ICONS: Record<PortalNavigationIcon, LucideIcon> = {
   roles: ShieldCheck,
   attendance: CalendarClock,
   reports: FileBarChart,
-  payroll: WalletCards,
   users: UserCog,
-  audit: ClipboardList,
-  settings: Settings,
   profile: UserCircle,
 };
 

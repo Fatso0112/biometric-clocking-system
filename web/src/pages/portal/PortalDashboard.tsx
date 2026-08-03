@@ -1,16 +1,18 @@
 import {
   Building2,
-  CalendarCheck2,
   Clock3,
   ShieldCheck,
   UserCheck,
   UsersRound,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   MetricCard,
   MetricGrid,
   PortalActionButton,
+  PortalEmptyState,
+  PortalNotice,
   PortalPageHeader,
   PortalPanel,
   PortalStatus,
@@ -19,30 +21,83 @@ import {
   PortalTable,
 } from '../../components/portal/PortalUi';
 import { useSession } from '../../context/SessionContext';
-import { usePortalDemo } from '../../hooks/usePortalDemo';
 import type { PortalRole } from '../../navigation/portalNavigation';
+import {
+  getAdminEmployees,
+  getAllUserAccounts,
+  type AdminEmployeeResponse,
+  type UserAccountResponse,
+} from '../../services/adminEmployeesApi';
+import {
+  getDepartments,
+  type DepartmentResponse,
+} from '../../services/departmentsApi';
+import { ApiError } from '../../services/httpClient';
+import {
+  getAttendanceDashboard,
+  type AttendanceDashboardResponse,
+} from '../../services/organisationAttendanceApi';
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return 'Dashboard data could not be loaded.';
+}
 
 export default function PortalDashboard({ role }: { role: PortalRole }) {
-  const state = usePortalDemo();
   const navigate = useNavigate();
-  const { authorizedRoles, setActiveRole } = useSession();
-  const activeEmployees = state.employees.filter((employee) => employee.status === 'active');
-  const activeSupervisors = new Set(
-    state.roleAssignments
-      .filter((assignment) => assignment.active && assignment.role === 'supervisor')
-      .map((assignment) => assignment.employeeNumber),
-  );
-  const today = state.attendance.reduce((latest, record) =>
-    record.workDate > latest ? record.workDate : latest, '');
-  const todayAttendance = state.attendance.filter((record) => record.workDate === today);
-  const recentAudits = state.auditEvents.slice(0, 5);
+  const { accessToken, authorizedRoles, setActiveRole } = useSession();
+  const [dashboard, setDashboard] = useState<AttendanceDashboardResponse | null>(null);
+  const [employees, setEmployees] = useState<AdminEmployeeResponse[]>([]);
+  const [departments, setDepartments] = useState<DepartmentResponse[]>([]);
+  const [accounts, setAccounts] = useState<UserAccountResponse[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let active = true;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const attendance = await getAttendanceDashboard(accessToken!);
+        if (!active) return;
+        setDashboard(attendance);
+
+        if (role === 'admin') {
+          const [employeeData, departmentData, accountData] = await Promise.all([
+            getAdminEmployees(accessToken!),
+            getDepartments(accessToken!),
+            getAllUserAccounts(accessToken!),
+          ]);
+          if (!active) return;
+          setEmployees(employeeData);
+          setDepartments(departmentData);
+          setAccounts(accountData);
+        }
+      } catch (loadError) {
+        if (active) setError(getErrorMessage(loadError));
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [accessToken, role]);
+
+  const recentActivity = dashboard?.recentActivity ?? [];
 
   if (role === 'hr') {
     return (
       <div className="mx-auto max-w-6xl">
         <PortalPageHeader
           title="HR Dashboard"
-          description="Monitor attendance and workforce activity from the shared frontend demo repository."
+          description="Live attendance information loaded from the PostgreSQL-backed API."
           actions={authorizedRoles.includes('employee') ? (
             <PortalActionButton
               onClick={() => {
@@ -55,55 +110,63 @@ export default function PortalDashboard({ role }: { role: PortalRole }) {
             </PortalActionButton>
           ) : null}
         />
+        {error ? <PortalNotice tone="error">{error}</PortalNotice> : null}
         <MetricGrid>
-          <MetricCard label="Active employees" value={activeEmployees.length} icon={<UsersRound className="h-5 w-5" />} />
-          <MetricCard label="Present" value={todayAttendance.filter((item) => item.status === 'present').length} icon={<UserCheck className="h-5 w-5" />} tone="green" />
-          <MetricCard label="Late" value={todayAttendance.filter((item) => item.status === 'late').length} icon={<Clock3 className="h-5 w-5" />} tone="amber" />
-          <MetricCard label="Absent" value={todayAttendance.filter((item) => item.status === 'absent').length} icon={<CalendarCheck2 className="h-5 w-5" />} tone="red" />
+          <MetricCard label="Registered employees" value={loading ? '—' : dashboard?.registeredEmployees ?? 0} icon={<UsersRound className="h-5 w-5" />} />
+          <MetricCard label="Working" value={loading ? '—' : dashboard?.currentlyWorking ?? 0} icon={<UserCheck className="h-5 w-5" />} tone="green" />
+          <MetricCard label="On break" value={loading ? '—' : dashboard?.onBreak ?? 0} icon={<Clock3 className="h-5 w-5" />} tone="amber" />
+          <MetricCard label="Missing clock-out" value={loading ? '—' : dashboard?.missingClockOut ?? 0} icon={<ShieldCheck className="h-5 w-5" />} tone="red" />
         </MetricGrid>
         <PortalPanel className="mt-6 p-6">
-          <h2 className="text-lg font-bold">Common HR tasks</h2>
+          <h2 className="text-lg font-bold">Attendance operations</h2>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link to="/hr/attendance" className="rounded-card border border-light-grey bg-white px-4 py-3 text-sm font-semibold hover:bg-light-grey/60">Review attendance</Link>
             <Link to="/hr/reports" className="rounded-card border border-light-grey bg-white px-4 py-3 text-sm font-semibold hover:bg-light-grey/60">Open reports</Link>
-            <Link to="/hr/payroll" className="rounded-card border border-light-grey bg-white px-4 py-3 text-sm font-semibold hover:bg-light-grey/60">Review payroll</Link>
           </div>
         </PortalPanel>
       </div>
     );
   }
 
+  const activeEmployees = employees.filter((employee) => employee.isActive).length;
+  const activeAccounts = accounts.filter((account) => account.isActive).length;
+
   return (
     <div className="mx-auto max-w-6xl">
       <PortalPageHeader
         title="Admin Dashboard"
-        description="Manage people, organizational structure, access, and operational records in the frontend demo workspace."
+        description="Live workforce and attendance information loaded from the production database."
         actions={<Link to="/admin/employees/new" className="inline-flex min-h-11 items-center rounded-card bg-black px-4 text-sm font-semibold text-white">Add employee</Link>}
       />
+      {error ? <PortalNotice tone="error">{error}</PortalNotice> : null}
       <MetricGrid>
-        <MetricCard label="Total employees" value={state.employees.length} icon={<UsersRound className="h-5 w-5" />} />
-        <MetricCard label="Active employees" value={activeEmployees.length} icon={<UserCheck className="h-5 w-5" />} tone="green" />
-        <MetricCard label="Departments" value={state.departments.length} icon={<Building2 className="h-5 w-5" />} />
-        <MetricCard label="Supervisors" value={activeSupervisors.size} icon={<ShieldCheck className="h-5 w-5" />} />
+        <MetricCard label="Total employees" value={loading ? '—' : employees.length} icon={<UsersRound className="h-5 w-5" />} />
+        <MetricCard label="Active employees" value={loading ? '—' : activeEmployees} icon={<UserCheck className="h-5 w-5" />} tone="green" />
+        <MetricCard label="Departments" value={loading ? '—' : departments.length} icon={<Building2 className="h-5 w-5" />} />
+        <MetricCard label="Active user accounts" value={loading ? '—' : activeAccounts} icon={<ShieldCheck className="h-5 w-5" />} />
       </MetricGrid>
       <PortalPanel className="mt-6">
         <div className="flex items-center justify-between border-b border-light-grey px-5 py-4">
-          <h2 className="font-bold">Recent activity</h2>
-          <Link to="/admin/audit-logs" className="text-sm font-semibold text-dark-grey hover:text-black">View all</Link>
+          <h2 className="font-bold">Today&apos;s recent attendance activity</h2>
+          <Link to="/admin/reports" className="text-sm font-semibold text-dark-grey hover:text-black">View report</Link>
         </div>
-        <PortalTable>
-          <thead><tr><th className={portalThClass}>Action</th><th className={portalThClass}>Target</th><th className={portalThClass}>Actor</th><th className={portalThClass}>Status</th></tr></thead>
-          <tbody>
-            {recentAudits.map((event) => (
-              <tr key={event.id}>
-                <td className={portalTdClass}><p className="font-semibold">{event.action}</p><p className="mt-1 text-xs text-dark-grey">{event.detail}</p></td>
-                <td className={portalTdClass}>{event.target}</td>
-                <td className={portalTdClass}>{event.actorEmployeeNumber}</td>
-                <td className={portalTdClass}><PortalStatus value="recorded" /></td>
-              </tr>
-            ))}
-          </tbody>
-        </PortalTable>
+        {recentActivity.length === 0 ? (
+          <PortalEmptyState>No attendance events have been recorded today.</PortalEmptyState>
+        ) : (
+          <PortalTable>
+            <thead><tr><th className={portalThClass}>Employee</th><th className={portalThClass}>Event</th><th className={portalThClass}>Time</th><th className={portalThClass}>Verification</th></tr></thead>
+            <tbody>
+              {recentActivity.map((event) => (
+                <tr key={event.id}>
+                  <td className={portalTdClass}><p className="font-semibold">{event.employeeName}</p><p className="mt-1 text-xs text-dark-grey">{event.employeeNumber}</p></td>
+                  <td className={portalTdClass}><PortalStatus value={event.eventType} /></td>
+                  <td className={portalTdClass}>{new Date(event.capturedAtUtc).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                  <td className={portalTdClass}>{event.verificationMethod}</td>
+                </tr>
+              ))}
+            </tbody>
+          </PortalTable>
+        )}
       </PortalPanel>
     </div>
   );

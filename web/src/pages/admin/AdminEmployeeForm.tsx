@@ -229,12 +229,7 @@ export default function AdminEmployeeForm() {
         />
 
         <PortalNotice tone="error">
-          This route previously updated only
-          the frontend demo repository. It
-          has been disabled to prevent
-          displaying a successful update
-          that was never saved to
-          PostgreSQL.
+          Employee editing is disabled until the backend exposes an update endpoint. This prevents showing a successful change that was never saved to PostgreSQL.
         </PortalNotice>
 
         <div className="mt-5">

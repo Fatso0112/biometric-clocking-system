@@ -51,6 +51,46 @@ if ($residuePaths) {
     throw "Remove generated patch/build residue before release."
 }
 
+Write-Host "Checking that retired data generators and biometric bypasses are absent..."
+$retiredFiles = @(
+    "web\src\services\portalDemoRepository.ts",
+    "web\src\services\mockWorkforce.ts",
+    "web\src\pages\FaceScan.tsx",
+    "web\src\pages\FingerprintScan.tsx",
+    "backend\src\ClockingManagement.Api\Controllers\BiometricVerificationsController.cs",
+    "backend\src\ClockingManagement.Api\Controllers\BiometricEnrolmentsController.cs"
+) |
+    ForEach-Object { Join-Path $root $_ } |
+    Where-Object { Test-Path $_ }
+
+if ($retiredFiles) {
+    $retiredFiles | ForEach-Object { Write-Host "Retired file restored: $_" }
+    throw "Remove retired data generators and biometric bypass files before release."
+}
+
+$productionSourcePaths = @(
+    (Join-Path $root "web\src"),
+    (Join-Path $root "backend\src\ClockingManagement.Api")
+)
+
+$retiredPatternMatches = Get-ChildItem $productionSourcePaths -Recurse -File |
+    Where-Object { $_.Extension -in @('.cs', '.ts', '.tsx') } |
+    Select-String -Pattern @(
+        'VITE_ENABLE_MOCK_BIOMETRIC',
+        'biometric-verifications/mock',
+        'biometric-enrolments/mock',
+        'TEST WITH MOCK BIOMETRIC',
+        'portalDemoRepository',
+        'mockWorkforce'
+    )
+
+if ($retiredPatternMatches) {
+    $retiredPatternMatches | ForEach-Object {
+        Write-Host "Retired production path: $($_.Path):$($_.LineNumber)"
+    }
+    throw "A retired data generator or biometric bypass was reintroduced."
+}
+
 $appSettingsPath = Join-Path $root "backend\src\ClockingManagement.Api\appsettings.json"
 $appSettings = Get-Content $appSettingsPath -Raw | ConvertFrom-Json
 

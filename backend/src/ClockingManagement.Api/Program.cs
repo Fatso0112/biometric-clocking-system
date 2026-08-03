@@ -457,10 +457,6 @@ builder.Services
     .AddDbContextCheck<ApplicationDbContext>(
         name: "postgresql-database");
 
-builder.Services.AddScoped<
-    IBiometricVerificationService,
-    MockBiometricVerificationService>();
-
 builder.Services.AddSingleton<
     IVerificationTokenService,
     VerificationTokenService>();
@@ -484,18 +480,6 @@ builder.Services.AddSingleton<
 builder.Services.AddSingleton<
     IAuthenticationTokenService,
     JwtAuthenticationTokenService>();
-
-builder.Services.AddSingleton<
-    IFaceRecognitionProvider,
-    MockFaceRecognitionProvider>();
-
-builder.Services.AddSingleton<
-    IFingerprintRecognitionProvider,
-    MockFingerprintRecognitionProvider>();
-
-builder.Services.AddScoped<
-    IBiometricEnrolmentService,
-    BiometricEnrolmentService>();
 
 var allowedFrontendOrigins =
     builder.Configuration

@@ -1,25 +1,28 @@
 # Biometric Clocking Management System
 
-A full-stack attendance MVP built with React, TypeScript, ASP.NET Core 8, Entity Framework Core and PostgreSQL.
+A full-stack attendance system built with React, TypeScript, ASP.NET Core 8, Entity Framework Core and PostgreSQL.
 
 ## Current integrated scope
 
 - Email/password authentication with JWT access tokens and rotating refresh tokens
 - Role-aware Employee, Supervisor, HR and Administrator routes
-- Live employee, department, user and work-location setup
-- GPS-backed Clock In, Start Break, End Break and Clock Out
-- Backend-authoritative attendance status and employee history
-- Administrator-managed mock biometric enrolment
-- Vercel frontend and Railway API deployment configuration
-- CI build/test workflow and release verification script
+- PostgreSQL-backed employee, department, user-account, role and work-location management
+- Browser GPS capture with backend geofence and network validation
+- WebAuthn device verification before Clock In, Start Break, End Break and Clock Out
+- Backend-authoritative attendance status, history, organisation dashboard and reports
+- Registered-device management and revocation
+- Vercel frontend and Railway API/PostgreSQL deployment configuration
+- CI workflow and release verification script
 
-The biometric provider is deliberately a mock provider for MVP testing. The project does not yet provide production facial recognition, liveness checks or physical fingerprint hardware integration.
+The application does not receive fingerprint images, face images or biometric templates. The phone's platform authenticator performs local user verification and returns a signed WebAuthn assertion. Depending on the phone's security settings, the operating system may allow a device PIN or passcode fallback.
+
+Legacy browser-generated workforce, attendance, payroll, report and audit records have been removed. Pages without a supporting database API are no longer presented as working features.
 
 ## Local setup
 
 ### Backend
 
-Copy `backend/.env.example` values into your secure local configuration or user secrets. Never commit real values.
+Use secure environment variables or .NET user secrets based on `backend/.env.example`. Never commit real values.
 
 ```powershell
 dotnet restore ClockingManagement.sln
@@ -44,6 +47,8 @@ Set `VITE_API_BASE_URL` in `web/.env.local` to the API origin.
 .\scripts\verify-release.ps1
 ```
 
-## Deployment
+## Deployment and cleanup
 
-See [DEPLOYMENT.md](DEPLOYMENT.md), [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md), [MVP_SCOPE.md](MVP_SCOPE.md) and [VALIDATION_REPORT.md](VALIDATION_REPORT.md).
+See [DEPLOYMENT.md](DEPLOYMENT.md), [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md), [MVP_SCOPE.md](MVP_SCOPE.md) and [docs/WEBAUTHN_ATTENDANCE.md](docs/WEBAUTHN_ATTENDANCE.md).
+
+A one-time, review-before-running PostgreSQL cleanup script for old test biometric records is available at `scripts/purge-legacy-mock-data.sql`.

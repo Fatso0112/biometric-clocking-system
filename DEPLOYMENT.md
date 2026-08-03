@@ -1,72 +1,43 @@
 # Deployment Guide
 
-This repository is configured for the following hosted MVP topology:
+Target topology:
 
 - React/Vite frontend on Vercel
 - ASP.NET Core API on Railway
 - PostgreSQL attached to the Railway API service
 
-The hosted MVP uses the backend mock face provider. It is not production facial recognition or physical fingerprint-device integration.
-
-## 1. Verify the release locally
-
-From the repository root in PowerShell:
+## 1. Verify locally
 
 ```powershell
 .\scripts\verify-release.ps1
 ```
 
-This installs dependencies, runs frontend tests and build, then restores, builds and tests the .NET solution.
+The release gate installs frontend dependencies, runs frontend tests and production build, then restores, builds and tests the .NET solution.
 
-## 2. Generate and rotate the JWT signing key
+## 2. Vercel configuration
 
-A signing key must never be committed. Generate a fresh value in PowerShell:
+Use:
 
-```powershell
-$bytes = New-Object byte[] 64
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($bytes)
-$rng.Dispose()
-[Convert]::ToBase64String($bytes)
+```text
+Root Directory: web
+Framework Preset: Vite
+Install Command: npm ci
+Build Command: npm run build
+Output Directory: dist
 ```
 
-Store the result only as the Railway variable `Jwt__SigningKey`. Rotate the currently deployed key because an earlier development configuration contained a hardcoded key. Rotation invalidates existing access and refresh sessions, so users must log in again.
-
-## 3. Deploy the frontend to Vercel
-
-Create a Vercel project from the Git repository with:
-
-- Root Directory: `web`
-- Framework Preset: Vite
-- Install Command: `npm ci`
-- Build Command: `npm run build`
-- Output Directory: `dist`
-
-Add production variables:
+Environment variables:
 
 ```text
 VITE_API_BASE_URL=https://your-api-domain.up.railway.app
 VITE_ENABLE_ADMIN_HR_PORTALS=true
-VITE_ENABLE_MOCK_BIOMETRIC=true
 ```
 
-`VITE_ENABLE_MOCK_BIOMETRIC=true` is for the hosted MVP only. Set it to `false` when an approved production biometric integration replaces the mock route.
+The committed `web/vercel.json` rewrites client-side routes to `index.html` and enables the required same-origin browser permissions.
 
-The committed `web/vercel.json` sends client-side routes to `index.html`, allows camera/geolocation for the same origin and applies basic response headers.
+## 3. Railway configuration
 
-Deploy and copy the exact Vercel origin, for example:
-
-```text
-https://your-project.vercel.app
-```
-
-Do not include a trailing slash when adding it to CORS.
-
-## 4. Configure the Railway backend
-
-Use `backend` as the Railway service root directory. The committed `backend/railway.json` selects the Dockerfile and configures `/health/ready` as the health check.
-
-Set these service variables:
+Use `backend` as the service root. Configure:
 
 ```text
 ASPNETCORE_ENVIRONMENT=Production
@@ -74,14 +45,19 @@ ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
 ConnectionStrings__DefaultConnection=<Railway PostgreSQL connection string>
 Jwt__Issuer=ClockingManagement.Api
 Jwt__Audience=ClockingManagement.Clients
-Jwt__SigningKey=<new random secret>
+Jwt__SigningKey=<random secret of at least 32 characters>
 Jwt__AccessTokenMinutes=15
 Jwt__RefreshTokenDays=7
 Cors__AllowedOrigins__0=https://your-project.vercel.app
 Swagger__Enabled=false
+WebAuthn__RpId=your-project.vercel.app
+WebAuthn__RpName=HR Attendance Management System
+WebAuthn__AllowedOrigins__0=https://your-project.vercel.app
 ```
 
-For the first clean deployment only, seed one administrator:
+`WebAuthn__RpId` is the hostname only. CORS and allowed origins use the full HTTPS origin, without a trailing slash.
+
+For the first clean deployment only:
 
 ```text
 SeedAdmin__Enabled=true
@@ -89,79 +65,87 @@ SeedAdmin__Email=<administrator email>
 SeedAdmin__Password=<strong temporary password>
 ```
 
-After the administrator can log in, change `SeedAdmin__Enabled` to `false` and redeploy. Change the temporary password through an approved administrator process.
+After successful administrator login, set `SeedAdmin__Enabled=false`, redeploy and replace the temporary password through the approved process.
 
-The API automatically applies EF Core migrations at startup. The deployment will fail instead of serving traffic when the database, JWT or production CORS configuration is missing.
+The API applies EF Core migrations at startup and exposes `/health/ready` for Railway readiness checks.
 
-Railway terminates public TLS and forwards traffic to the HTTP-only application container. The API deliberately avoids production `UseHttpsRedirection()` inside the container so `/health/ready` remains a direct HTTP 200 response and does not enter a proxy redirect loop. Public users still access the Railway HTTPS domain.
+## 4. Initial database-backed setup
 
-## 5. Initial application setup
+1. Create the actual work location and geofence.
+2. Create departments.
+3. Create employee records.
+4. Create user accounts linked to employees and assign roles.
+5. Sign in on the employee's production phone.
+6. Open **Profile → Manage Device Biometrics → Register This Device**.
+7. Complete the phone's platform-authenticator prompt.
+8. Test Clock In → Start Break → End Break → Clock Out.
 
-Log in as the seeded system administrator and complete these steps in order:
+Approved-network matching should remain disabled until valid office CIDR ranges and trusted proxy forwarding are configured and tested.
 
-1. Open **Work Locations** and create the office geofence. Use the actual office coordinates. Leave approved-network matching disabled until valid office CIDR ranges are configured.
-2. Open **Departments** and create at least one department.
-3. Open **Employees** and create the employee record.
-4. Open **Users** and create a login account linked to that employee, assigning the `Employee` role.
-5. Return to **Employees** and select **Enroll mock face** for the employee.
-6. Log out and sign in using the employee account.
-7. Complete Clock In → Start Break → End Break → Clock Out.
+## 5. Hosted smoke test
 
-The backend is authoritative for employee identity, biometric-profile state, event sequence, location, duplicate IDs and attendance status.
-
-## 6. Hosted smoke test
-
-Keep the browser Network tab open and confirm these requests succeed:
+Confirm these requests succeed:
 
 ```text
 POST /api/v1/auth/login
 GET  /api/v1/employees/me
+GET  /api/v1/webauthn/credentials
+POST /api/v1/webauthn/registration/options
+POST /api/v1/webauthn/registration/complete
 GET  /api/v1/attendance/today/{employeeId}
-POST /api/v1/biometric-verifications/mock
+POST /api/v1/webauthn/authentication/options
+POST /api/v1/webauthn/authentication/complete
 POST /api/v1/attendance/clock-in
 POST /api/v1/attendance/break/start
 POST /api/v1/attendance/break/end
 POST /api/v1/attendance/clock-out
 GET  /api/v1/attendance/history/me
+GET  /api/v1/attendance/dashboard
+GET  /api/v1/attendance/history?fromUtc=...&toUtc=...
 ```
 
-Expected attendance sequence:
+Expected sequence:
 
 ```text
 NotPresent → Working → OnBreak → Working → Completed
 ```
 
-Refresh the page after every action. The status and history must remain correct because they are read from PostgreSQL.
+Refresh after every action and verify that status, history, dashboard and reports remain consistent because they are read from PostgreSQL.
 
-## 7. Deployment troubleshooting
+## 6. Remove legacy test data
 
-### CORS error
+The application removes old browser demo storage automatically. Old database test records are not deleted automatically.
 
-Confirm `Cors__AllowedOrigins__0` exactly matches the Vercel origin and redeploy the API. Preview deployment URLs are different origins and must be added as additional indexed entries when preview-to-API access is required.
+After taking a PostgreSQL backup, review and run:
+
+```text
+scripts/purge-legacy-mock-data.sql
+```
+
+The script is preview-only by default and stops at a confirmation guard. After reviewing the counts and taking a backup, uncomment its confirmation `SET` statement to delete only old provider-generated biometric attendance/test rows and empty legacy biometric profiles. It does not delete employees, users, departments, work locations or WebAuthn credentials.
+
+## 7. Troubleshooting
+
+### CORS failure
+
+Confirm the Railway CORS origin exactly matches the Vercel production origin. Preview URLs are separate origins.
+
+### WebAuthn origin or RP failure
+
+Confirm the production hostname matches `WebAuthn__RpId` and `WebAuthn__AllowedOrigins__0`. A credential registered for an unrelated RP ID must be registered again.
 
 ### Geofence rejection
 
-Check the employee's assigned work location, office coordinates, allowed radius, maximum GPS accuracy and browser location permission. The frontend captures evidence; the backend makes the final decision.
+Check employee work-location assignment, office coordinates, radius, permitted accuracy and browser location permission.
 
-### Approved-network rejection
+### Unregistered device
 
-For a public hosted MVP, set `RequireIpMatch` to false on the work location unless the real office CIDR ranges and proxy forwarding are configured and tested.
+Open the employee profile and register the current device. There is no administrator-created verification bypass.
 
-### Biometric profile not enrolled
+### Empty reports
 
-Log in as the administrator, open **Employees**, and create the employee's mock face enrolment.
+Reports display stored attendance events only. Confirm the selected range, employee work-location assignment and that events exist in PostgreSQL.
 
-### Login works but employee routes fail
+## 8. Remaining production work
 
-Verify the user account is linked to the employee record and has the `Employee` role. A system administrator account is intentionally allowed to exist without an employee link.
-
-## 8. Production limitations
-
-Before real organisational use, replace or complete:
-
-- mock biometric verification with an approved provider and liveness/device controls;
-- browser/local-storage refresh-token handling with a stronger production session architecture;
-- self-service password reset with a secure email/OTP workflow;
-- full work-location network management and trusted-proxy restrictions;
-- real attendance corrections, payroll and some reporting/settings pages still marked as prototype/demo;
-- monitoring, alerting, backups, retention and POPIA operating procedures.
+Before broad organisational rollout, complete monitoring, alerting, backup validation, retention, POPIA procedures, secure password reset, supervisor/team scoping, schedules/leave/holiday rules, payroll approval rules and stronger production session-storage design.

@@ -301,10 +301,23 @@ public sealed class AttendanceController
         IReadOnlyCollection<
             AttendanceEventResponse>>> GetHistory(
         [FromQuery] Guid? employeeId,
+        [FromQuery] DateTimeOffset? fromUtc,
+        [FromQuery] DateTimeOffset? toUtc,
         [FromQuery] int limit = 100,
         CancellationToken cancellationToken = default)
     {
-        limit = Math.Clamp(limit, 1, 500);
+        limit = Math.Clamp(limit, 1, 10_000);
+
+        if (fromUtc.HasValue &&
+            toUtc.HasValue &&
+            fromUtc.Value >= toUtc.Value)
+        {
+            return BadRequest(new
+            {
+                errorCode = "INVALID_ATTENDANCE_RANGE",
+                message = "The attendance start time must be earlier than the end time."
+            });
+        }
 
         var query =
             _dbContext.AttendanceEvents
@@ -318,6 +331,18 @@ public sealed class AttendanceController
             query = query.Where(item =>
                 item.EmployeeId ==
                 employeeId.Value);
+        }
+
+        if (fromUtc.HasValue)
+        {
+            query = query.Where(item =>
+                item.CapturedAtUtc >= fromUtc.Value);
+        }
+
+        if (toUtc.HasValue)
+        {
+            query = query.Where(item =>
+                item.CapturedAtUtc < toUtc.Value);
         }
 
         var items = await query
