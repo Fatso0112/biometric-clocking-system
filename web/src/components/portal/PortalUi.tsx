@@ -100,16 +100,20 @@ export function PortalTable({ children }: { children: ReactNode }) {
 }
 
 export function PortalStatus({ value }: { value: string }) {
-  const normalized = value.toLowerCase();
-  const tone =
-    normalized === 'active' || normalized === 'present' || normalized === 'paid' || normalized === 'verified'
-      ? 'border-status-green/30 bg-status-green-soft text-status-green'
-      : normalized === 'inactive' || normalized === 'absent' || normalized === 'failed'
+  const normalized = value.trim().toLowerCase().replace(/-/g, ' ');
+  const greenStatuses = ['active', 'present', 'paid', 'verified', 'good', 'above target'];
+  const amberStatuses = ['late', 'approved', 'review', 'needs review', 'in progress'];
+  const redStatuses = ['inactive', 'absent', 'failed', 'invalid'];
+
+  const tone = greenStatuses.includes(normalized)
+    ? 'border-status-green/30 bg-status-green-soft text-status-green'
+    : amberStatuses.includes(normalized)
+      ? 'border-status-amber/30 bg-status-amber-soft text-status-amber'
+      : redStatuses.includes(normalized)
         ? 'border-status-red/30 bg-status-red-soft text-status-red'
-        : normalized === 'late' || normalized === 'approved'
-          ? 'border-status-amber/30 bg-status-amber-soft text-status-amber'
-          : 'border-light-grey bg-cream-white text-dark-grey';
-  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${tone}`}>{value.replace('-', ' ')}</span>;
+        : 'border-light-grey bg-cream-white text-dark-grey';
+
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${tone}`}>{value.replace(/-/g, ' ')}</span>;
 }
 
 export function PortalField({
