@@ -38,18 +38,62 @@ export function formatDuration(durationMinutes: number | null): string {
 export function downloadCsv(
   filename: string,
   headers: readonly string[],
-  rows: readonly (readonly (string | number | null)[])[],
+  rows: readonly (
+    readonly (string | number | null)[]
+  )[],
 ): void {
-  const escapeCell = (value: string | number | null) => {
-    const normalized = value === null ? '' : String(value);
+  // Semicolon works reliably with Excel regional
+  // settings that do not recognise commas as separators.
+  const delimiter = ';';
+
+  const escapeCell = (
+    value: string | number | null,
+  ): string => {
+    const normalized =
+      value === null ? '' : String(value);
+
     return `"${normalized.replace(/"/g, '""')}"`;
   };
-  const content = [headers, ...rows].map((row) => row.map(escapeCell).join(',')).join('\n');
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+
+  const csvRows = [
+    headers,
+    ...rows,
+  ].map((row) =>
+    row
+      .map(escapeCell)
+      .join(delimiter),
+  );
+
+  /*
+   * sep=; tells Excel which separator to use.
+   * The UTF-8 BOM ensures names and special
+   * characters display correctly.
+   */
+  const content = [
+    `sep=${delimiter}`,
+    ...csvRows,
+  ].join('\r\n');
+
+  const blob = new Blob(
+    ['\uFEFF', content],
+    {
+      type: 'text/csv;charset=utf-8;',
+    },
+  );
+
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
+
+  const anchor =
+    document.createElement('a');
+
   anchor.href = url;
   anchor.download = filename;
+
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 0);
 }
