@@ -334,6 +334,24 @@ public sealed class UserAccountsController
             }
         }
 
+        if (normalizedRoles.Contains(
+                ApplicationRoles.Supervisor,
+                StringComparer.Ordinal) &&
+            (employee is null ||
+             !employee.IsActive))
+        {
+            return BadRequest(new
+            {
+                errorCode =
+                    "SUPERVISOR_EMPLOYEE_LINK_REQUIRED",
+
+                message =
+                    "A supervisor account must be linked to an " +
+                    "active employee record so its department " +
+                    "can be determined."
+            });
+        }
+
         var callerIsSystemAdministrator =
             User.IsInRole(
                 ApplicationRoles
@@ -572,6 +590,38 @@ public sealed class UserAccountsController
             }
         }
 
+        var userIsSupervisor =
+            await _userManager.IsInRoleAsync(
+                user,
+                ApplicationRoles.Supervisor);
+
+        if (userIsSupervisor)
+        {
+            var supervisorEmployeeIsActive =
+                request.EmployeeId.HasValue &&
+                await _dbContext.Employees
+                    .AsNoTracking()
+                    .AnyAsync(
+                        employee =>
+                            employee.Id ==
+                                request.EmployeeId.Value &&
+                            employee.IsActive,
+                        cancellationToken);
+
+            if (!supervisorEmployeeIsActive)
+            {
+                return BadRequest(new
+                {
+                    errorCode =
+                        "SUPERVISOR_EMPLOYEE_LINK_REQUIRED",
+
+                    message =
+                        "A supervisor account must remain linked " +
+                        "to an active employee record."
+                });
+            }
+        }
+
         await using var transaction =
             await _dbContext.Database
                 .BeginTransactionAsync(
@@ -712,6 +762,35 @@ public sealed class UserAccountsController
                 message =
                     "The user account was not found."
             });
+        }
+
+        if (requestedRoles.Contains(
+                ApplicationRoles.Supervisor,
+                StringComparer.Ordinal))
+        {
+            var supervisorEmployeeIsActive =
+                user.EmployeeId.HasValue &&
+                await _dbContext.Employees
+                    .AsNoTracking()
+                    .AnyAsync(
+                        employee =>
+                            employee.Id ==
+                                user.EmployeeId.Value &&
+                            employee.IsActive,
+                        cancellationToken);
+
+            if (!supervisorEmployeeIsActive)
+            {
+                return BadRequest(new
+                {
+                    errorCode =
+                        "SUPERVISOR_EMPLOYEE_LINK_REQUIRED",
+
+                    message =
+                        "The Supervisor role can only be assigned " +
+                        "to an account linked to an active employee."
+                });
+            }
         }
 
         var currentRoles =

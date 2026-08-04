@@ -31,26 +31,60 @@ public sealed class EmployeesController : ControllerBase
         IReadOnlyCollection<EmployeeResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
-        var employees = await _dbContext.Employees
-            .AsNoTracking()
-            .OrderBy(employee => employee.FirstName)
-            .ThenBy(employee => employee.LastName)
-            .Select(employee => new EmployeeResponse(
-                employee.Id,
-                employee.EmployeeNumber,
-                employee.FirstName,
-                employee.LastName,
-                employee.FirstName + " " +
-                    employee.LastName,
-                employee.Email,
-                employee.PhoneNumber,
-                employee.DepartmentId,
-                employee.Department.Name,
-                employee.WorkLocationId,
-                employee.WorkLocation.Name,
-                employee.IsActive,
-                employee.CreatedAtUtc))
-            .ToListAsync(cancellationToken);
+        var employeeQuery =
+            _dbContext.Employees
+                .AsNoTracking()
+                .AsQueryable();
+
+        if (RequiresSupervisorDepartmentScope())
+        {
+            var departmentId =
+                await GetAuthenticatedDepartmentIdAsync(
+                    cancellationToken);
+
+            if (!departmentId.HasValue)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        errorCode =
+                            "SUPERVISOR_DEPARTMENT_NOT_LINKED",
+                        message =
+                            "The supervisor account must be linked " +
+                            "to an active employee and department."
+                    });
+            }
+
+            employeeQuery =
+                employeeQuery.Where(employee =>
+                    employee.DepartmentId ==
+                        departmentId.Value);
+        }
+
+        var employees =
+            await employeeQuery
+                .OrderBy(employee =>
+                    employee.FirstName)
+                .ThenBy(employee =>
+                    employee.LastName)
+                .Select(employee =>
+                    new EmployeeResponse(
+                        employee.Id,
+                        employee.EmployeeNumber,
+                        employee.FirstName,
+                        employee.LastName,
+                        employee.FirstName + " " +
+                            employee.LastName,
+                        employee.Email,
+                        employee.PhoneNumber,
+                        employee.DepartmentId,
+                        employee.Department.Name,
+                        employee.WorkLocationId,
+                        employee.WorkLocation.Name,
+                        employee.IsActive,
+                        employee.CreatedAtUtc))
+                .ToListAsync(cancellationToken);
 
         return Ok(employees);
     }
@@ -129,30 +163,66 @@ public sealed class EmployeesController : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
-        var employee = await _dbContext.Employees
-            .AsNoTracking()
-            .Where(item => item.Id == id)
-            .Select(item => new EmployeeResponse(
-                item.Id,
-                item.EmployeeNumber,
-                item.FirstName,
-                item.LastName,
-                item.FirstName + " " + item.LastName,
-                item.Email,
-                item.PhoneNumber,
-                item.DepartmentId,
-                item.Department.Name,
-                item.WorkLocationId,
-                item.WorkLocation.Name,
-                item.IsActive,
-                item.CreatedAtUtc))
-            .SingleOrDefaultAsync(cancellationToken);
+        var employeeQuery =
+            _dbContext.Employees
+                .AsNoTracking()
+                .AsQueryable();
+
+        if (RequiresSupervisorDepartmentScope())
+        {
+            var departmentId =
+                await GetAuthenticatedDepartmentIdAsync(
+                    cancellationToken);
+
+            if (!departmentId.HasValue)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        errorCode =
+                            "SUPERVISOR_DEPARTMENT_NOT_LINKED",
+                        message =
+                            "The supervisor account must be linked " +
+                            "to an active employee and department."
+                    });
+            }
+
+            employeeQuery =
+                employeeQuery.Where(item =>
+                    item.DepartmentId ==
+                        departmentId.Value);
+        }
+
+        var employee =
+            await employeeQuery
+                .Where(item =>
+                    item.Id == id)
+                .Select(item =>
+                    new EmployeeResponse(
+                        item.Id,
+                        item.EmployeeNumber,
+                        item.FirstName,
+                        item.LastName,
+                        item.FirstName + " " +
+                            item.LastName,
+                        item.Email,
+                        item.PhoneNumber,
+                        item.DepartmentId,
+                        item.Department.Name,
+                        item.WorkLocationId,
+                        item.WorkLocation.Name,
+                        item.IsActive,
+                        item.CreatedAtUtc))
+                .SingleOrDefaultAsync(
+                    cancellationToken);
 
         if (employee is null)
         {
             return NotFound(new
             {
-                message = "Employee was not found."
+                message =
+                    "Employee was not found in your permitted scope."
             });
         }
 
@@ -325,11 +395,43 @@ public sealed class EmployeesController : ControllerBase
             });
         }
 
-        var employee =
-            await _dbContext.Employees
+        var employeeQuery =
+            _dbContext.Employees
                 .AsNoTracking()
-                .Include(item => item.Department)
-                .Include(item => item.WorkLocation)
+                .Include(item =>
+                    item.Department)
+                .Include(item =>
+                    item.WorkLocation)
+                .AsQueryable();
+
+        if (RequiresSupervisorDepartmentScope())
+        {
+            var departmentId =
+                await GetAuthenticatedDepartmentIdAsync(
+                    cancellationToken);
+
+            if (!departmentId.HasValue)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        errorCode =
+                            "SUPERVISOR_DEPARTMENT_NOT_LINKED",
+                        message =
+                            "The supervisor account must be linked " +
+                            "to an active employee and department."
+                    });
+            }
+
+            employeeQuery =
+                employeeQuery.Where(item =>
+                    item.DepartmentId ==
+                        departmentId.Value);
+        }
+
+        var employee =
+            await employeeQuery
                 .SingleOrDefaultAsync(
                     item =>
                         EF.Functions.ILike(
@@ -342,7 +444,7 @@ public sealed class EmployeesController : ControllerBase
             return NotFound(new
             {
                 message =
-                    $"No employee was found with employee number '{normalizedEmployeeNumber}'."
+                    $"No employee was found with employee number '{normalizedEmployeeNumber}' in your permitted scope."
             });
         }
 
@@ -360,5 +462,45 @@ public sealed class EmployeesController : ControllerBase
                 employee.IsActive);
 
         return Ok(response);
+    }
+
+    private bool RequiresSupervisorDepartmentScope()
+    {
+        return
+            User.IsInRole(
+                ApplicationRoles.Supervisor) &&
+            !User.IsInRole(
+                ApplicationRoles.HROfficer) &&
+            !User.IsInRole(
+                ApplicationRoles.PayrollOfficer) &&
+            !User.IsInRole(
+                ApplicationRoles
+                    .SystemAdministrator);
+    }
+
+    private async Task<Guid?>
+        GetAuthenticatedDepartmentIdAsync(
+            CancellationToken cancellationToken)
+    {
+        var employeeIdValue =
+            User.FindFirstValue(
+                "employee_id");
+
+        if (!Guid.TryParse(
+                employeeIdValue,
+                out var employeeId))
+        {
+            return null;
+        }
+
+        return await _dbContext.Employees
+            .AsNoTracking()
+            .Where(employee =>
+                employee.Id == employeeId &&
+                employee.IsActive)
+            .Select(employee =>
+                (Guid?)employee.DepartmentId)
+            .SingleOrDefaultAsync(
+                cancellationToken);
     }
 }

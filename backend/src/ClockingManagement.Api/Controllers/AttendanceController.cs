@@ -138,8 +138,9 @@ public sealed class AttendanceController
             });
         }
 
-        if (!CanViewEmployeeAttendance(
-                item.EmployeeId))
+        if (!await CanViewEmployeeAttendanceAsync(
+                item.EmployeeId,
+                cancellationToken))
         {
             return StatusCode(
                 StatusCodes.Status403Forbidden,
@@ -163,8 +164,9 @@ public sealed class AttendanceController
             Guid employeeId,
             CancellationToken cancellationToken)
     {
-        if (!CanViewEmployeeAttendance(
-                employeeId))
+        if (!await CanViewEmployeeAttendanceAsync(
+                employeeId,
+                cancellationToken))
         {
             return StatusCode(
                 StatusCodes.Status403Forbidden,
@@ -314,8 +316,11 @@ public sealed class AttendanceController
         {
             return BadRequest(new
             {
-                errorCode = "INVALID_ATTENDANCE_RANGE",
-                message = "The attendance start time must be earlier than the end time."
+                errorCode =
+                    "INVALID_ATTENDANCE_RANGE",
+                message =
+                    "The attendance start time must be earlier " +
+                    "than the end time."
             });
         }
 
@@ -326,11 +331,52 @@ public sealed class AttendanceController
                     item.Employee)
                 .AsQueryable();
 
+        if (RequiresSupervisorAttendanceScope())
+        {
+            var departmentId =
+                await GetAuthenticatedDepartmentIdAsync(
+                    cancellationToken);
+
+            if (!departmentId.HasValue)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        errorCode =
+                            "SUPERVISOR_DEPARTMENT_NOT_LINKED",
+                        message =
+                            "The supervisor account must be linked " +
+                            "to an active employee and department."
+                    });
+            }
+
+            query = query.Where(item =>
+                item.Employee.DepartmentId ==
+                    departmentId.Value);
+        }
+
         if (employeeId.HasValue)
         {
+            if (!await CanViewEmployeeAttendanceAsync(
+                    employeeId.Value,
+                    cancellationToken))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        errorCode =
+                            "ATTENDANCE_ACCESS_FORBIDDEN",
+                        message =
+                            "Supervisors may view attendance only " +
+                            "for employees in their own department."
+                    });
+            }
+
             query = query.Where(item =>
                 item.EmployeeId ==
-                employeeId.Value);
+                    employeeId.Value);
         }
 
         if (fromUtc.HasValue)
@@ -345,13 +391,14 @@ public sealed class AttendanceController
                 item.CapturedAtUtc < toUtc.Value);
         }
 
-        var items = await query
-            .OrderByDescending(item =>
-                item.CapturedAtUtc)
-            .ThenByDescending(item =>
-                item.CreatedAtUtc)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        var items =
+            await query
+                .OrderByDescending(item =>
+                    item.CapturedAtUtc)
+                .ThenByDescending(item =>
+                    item.CreatedAtUtc)
+                .Take(limit)
+                .ToListAsync(cancellationToken);
 
         return Ok(
             items.Select(ToResponse).ToList());
@@ -369,8 +416,9 @@ public sealed class AttendanceController
             Guid employeeId,
             CancellationToken cancellationToken)
     {
-        if (!CanViewEmployeeAttendance(
-                employeeId))
+        if (!await CanViewEmployeeAttendanceAsync(
+                employeeId,
+                cancellationToken))
         {
             return StatusCode(
                 StatusCodes.Status403Forbidden,
@@ -511,13 +559,44 @@ public sealed class AttendanceController
         var currentUtc =
             DateTimeOffset.UtcNow;
 
-        var employees =
-            await _dbContext.Employees
+        var employeeQuery =
+            _dbContext.Employees
                 .AsNoTracking()
                 .Include(employee =>
                     employee.WorkLocation)
                 .Where(employee =>
                     employee.IsActive)
+                .AsQueryable();
+
+        if (RequiresSupervisorDashboardScope())
+        {
+            var departmentId =
+                await GetAuthenticatedDepartmentIdAsync(
+                    cancellationToken);
+
+            if (!departmentId.HasValue)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        errorCode =
+                            "SUPERVISOR_DEPARTMENT_NOT_LINKED",
+                        message =
+                            "The supervisor account must be linked " +
+                            "to an active employee and department " +
+                            "before viewing the dashboard."
+                    });
+            }
+
+            employeeQuery =
+                employeeQuery.Where(employee =>
+                    employee.DepartmentId ==
+                        departmentId.Value);
+        }
+
+        var employees =
+            await employeeQuery
                 .OrderBy(employee =>
                     employee.EmployeeNumber)
                 .ToListAsync(
@@ -1280,8 +1359,10 @@ public sealed class AttendanceController
         };
     }
 
-    private bool CanViewEmployeeAttendance(
-        Guid employeeId)
+    private async Task<bool>
+        CanViewEmployeeAttendanceAsync(
+            Guid employeeId,
+            CancellationToken cancellationToken)
     {
         var authenticatedEmployeeId =
             GetAuthenticatedEmployeeId();
@@ -1293,9 +1374,46 @@ public sealed class AttendanceController
             return true;
         }
 
+        if (HasOrganisationWideAttendanceAccess())
+        {
+            return true;
+        }
+
+        if (!User.IsInRole(
+                ApplicationRoles.Supervisor))
+        {
+            return false;
+        }
+
+        var supervisorDepartmentId =
+            await GetAuthenticatedDepartmentIdAsync(
+                cancellationToken);
+
+        if (!supervisorDepartmentId.HasValue)
+        {
+            return false;
+        }
+
+        var employeeDepartmentId =
+            await _dbContext.Employees
+                .AsNoTracking()
+                .Where(employee =>
+                    employee.Id == employeeId &&
+                    employee.IsActive)
+                .Select(employee =>
+                    (Guid?)employee.DepartmentId)
+                .SingleOrDefaultAsync(
+                    cancellationToken);
+
         return
-            User.IsInRole(
-                ApplicationRoles.Supervisor) ||
+            employeeDepartmentId.HasValue &&
+            employeeDepartmentId.Value ==
+                supervisorDepartmentId.Value;
+    }
+
+    private bool HasOrganisationWideAttendanceAccess()
+    {
+        return
             User.IsInRole(
                 ApplicationRoles.HROfficer) ||
             User.IsInRole(
@@ -1303,6 +1421,48 @@ public sealed class AttendanceController
             User.IsInRole(
                 ApplicationRoles
                     .SystemAdministrator);
+    }
+
+    private bool RequiresSupervisorAttendanceScope()
+    {
+        return
+            User.IsInRole(
+                ApplicationRoles.Supervisor) &&
+            !HasOrganisationWideAttendanceAccess();
+    }
+
+    private bool RequiresSupervisorDashboardScope()
+    {
+        return
+            User.IsInRole(
+                ApplicationRoles.Supervisor) &&
+            !HasOrganisationWideAttendanceAccess() &&
+            !User.IsInRole(
+                ApplicationRoles.ExecutiveViewer);
+    }
+
+    private async Task<Guid?>
+        GetAuthenticatedDepartmentIdAsync(
+            CancellationToken cancellationToken)
+    {
+        var authenticatedEmployeeId =
+            GetAuthenticatedEmployeeId();
+
+        if (!authenticatedEmployeeId.HasValue)
+        {
+            return null;
+        }
+
+        return await _dbContext.Employees
+            .AsNoTracking()
+            .Where(employee =>
+                employee.Id ==
+                    authenticatedEmployeeId.Value &&
+                employee.IsActive)
+            .Select(employee =>
+                (Guid?)employee.DepartmentId)
+            .SingleOrDefaultAsync(
+                cancellationToken);
     }
 
     private Guid? GetAuthenticatedEmployeeId()
