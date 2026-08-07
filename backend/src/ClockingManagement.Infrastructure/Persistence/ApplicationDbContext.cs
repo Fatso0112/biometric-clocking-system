@@ -13,6 +13,9 @@ public sealed class ApplicationDbContext : DbContext
 
     public DbSet<Department> Departments =>
         Set<Department>();
+    
+    public DbSet<DepartmentPayrollPolicy> DepartmentPayrollPolicies =>
+    Set<DepartmentPayrollPolicy>();
 
     public DbSet<WorkLocation> WorkLocations =>
         Set<WorkLocation>();

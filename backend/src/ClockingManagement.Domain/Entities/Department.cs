@@ -17,4 +17,6 @@ public sealed class Department
 
     public ICollection<Employee> Employees { get; set; } =
         new List<Employee>();
+        public ICollection<DepartmentPayrollPolicy> PayrollPolicies { get; set; } =
+    new List<DepartmentPayrollPolicy>();
 }
