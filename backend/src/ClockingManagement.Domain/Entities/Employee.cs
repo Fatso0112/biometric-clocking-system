@@ -51,6 +51,12 @@ public sealed class Employee
         WebAuthnCredentials { get; set; } =
             new List<WebAuthnCredential>();
 
+    public ICollection<PayrollEntry> PayrollEntries { get; set; } =
+        new List<PayrollEntry>();
+
+    public ICollection<PayRateHistory> PayRateHistory { get; set; } =
+        new List<PayRateHistory>();
+
     public ICollection<WebAuthnChallenge>
         WebAuthnChallenges { get; set; } =
             new List<WebAuthnChallenge>();

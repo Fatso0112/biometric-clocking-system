@@ -23,6 +23,8 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.HttpOverrides;
 using ClockingManagement.Api.Authentication;
 using Microsoft.OpenApi.Models;
+using ClockingManagement.Application.Payroll;
+using ClockingManagement.Infrastructure.Payroll;
 
 var builder =
     WebApplication.CreateBuilder(args);
@@ -392,7 +394,32 @@ builder.Services.AddAuthorization(
                     ApplicationRoles.PayrollOfficer,
                     ApplicationRoles.ExecutiveViewer,
                     ApplicationRoles.SystemAdministrator));
-    });
+
+
+
+        options.AddPolicy(
+    AuthorizationPolicies.ViewPayroll,
+    policy =>
+        policy.RequireRole(
+            ApplicationRoles.HROfficer,
+            ApplicationRoles.PayrollOfficer,
+            ApplicationRoles.ExecutiveViewer,
+            ApplicationRoles.SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies.ManagePayroll,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.PayrollOfficer,
+                    ApplicationRoles.SystemAdministrator));
+
+        options.AddPolicy(
+            AuthorizationPolicies.ApprovePayroll,
+            policy =>
+                policy.RequireRole(
+                    ApplicationRoles.PayrollOfficer,
+                    ApplicationRoles.SystemAdministrator));
+            });
 
 builder.Services.AddRateLimiter(
     options =>
@@ -480,6 +507,10 @@ builder.Services.AddSingleton<
 builder.Services.AddSingleton<
     IAuthenticationTokenService,
     JwtAuthenticationTokenService>();
+
+builder.Services.AddScoped<
+    IPayrollService,
+    PayrollService>();
 
 var allowedFrontendOrigins =
     builder.Configuration

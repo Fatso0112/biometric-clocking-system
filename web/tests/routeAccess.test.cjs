@@ -6,6 +6,8 @@ const HOME_BY_ROLE = {
   employee: '/clock',
   supervisor: '/supervisor/dashboard',
   hr: '/hr/dashboard',
+  payroll: '/payroll/dashboard',
+  executive: '/executive/dashboard',
   admin: '/admin/dashboard',
 };
 
@@ -28,7 +30,7 @@ test('the shared guard allows each active role into its own route', () => {
   }
 });
 
-test('the shared guard rejects cross-role direct navigation for all four roles', () => {
+test('the shared guard rejects cross-role direct navigation for every supported role', () => {
   const roles = Object.keys(HOME_BY_ROLE);
   for (const activeRole of roles) {
     for (const requiredRole of roles.filter((role) => role !== activeRole)) {

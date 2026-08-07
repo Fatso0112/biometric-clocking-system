@@ -14,9 +14,10 @@ test('the completed portal integration defaults on but keeps an explicit kill sw
   assert.equal(resolveFeatureFlag('false', true), false);
 });
 
-test('the off-state exposes no Admin or HR navigation entries', () => {
-  assert.deepEqual(getPortalNavigationItems('admin', false), []);
-  assert.deepEqual(getPortalNavigationItems('hr', false), []);
+test('the off-state exposes no management portal navigation entries', () => {
+  for (const role of ['admin', 'hr', 'payroll', 'executive']) {
+    assert.deepEqual(getPortalNavigationItems(role, false), []);
+  }
 });
 
 test('only explicit true or 1 values enable portal exposure', () => {
@@ -26,13 +27,15 @@ test('only explicit true or 1 values enable portal exposure', () => {
   assert.equal(isEnabledFeatureFlag('yes'), false);
 });
 
-test('production navigation exposes only database-backed portal pages', () => {
+test('production navigation exposes database-backed payroll pages and excludes placeholders', () => {
   const paths = [
     ...getPortalNavigationItems('admin', true),
     ...getPortalNavigationItems('hr', true),
+    ...getPortalNavigationItems('payroll', true),
+    ...getPortalNavigationItems('executive', true),
   ].map((item) => item.path);
 
-  assert.equal(paths.some((path) => path.includes('payroll')), false);
+  assert.equal(paths.some((path) => path.includes('payroll')), true);
   assert.equal(paths.some((path) => path.includes('settings')), false);
   assert.equal(paths.some((path) => path.includes('audit')), false);
 });

@@ -57,6 +57,8 @@ export type RoleHomePath =
   | '/clock'
   | '/supervisor/dashboard'
   | '/hr/dashboard'
+  | '/payroll/dashboard'
+  | '/executive/dashboard'
   | '/admin/dashboard';
 
 export function getRoleHomePath(role: UserRole): RoleHomePath {
@@ -67,6 +69,10 @@ export function getRoleHomePath(role: UserRole): RoleHomePath {
       return '/supervisor/dashboard';
     case 'hr':
       return '/hr/dashboard';
+    case 'payroll':
+      return '/payroll/dashboard';
+    case 'executive':
+      return '/executive/dashboard';
     case 'admin':
       return '/admin/dashboard';
   }

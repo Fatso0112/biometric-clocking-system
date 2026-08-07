@@ -33,6 +33,8 @@ const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
 const HrAttendance = lazy(() => import('./pages/hr/HrAttendance'));
 const PortalReports = lazy(() => import('./pages/portal/PortalReports'));
 const PortalProfile = lazy(() => import('./pages/portal/PortalProfile'));
+const PayrollRuns = lazy(() => import('./pages/payroll/PayrollRuns'));
+const PayrollRunDetails = lazy(() => import('./pages/payroll/PayrollRunDetails'));
 
 function PortalLoading() {
   return (
@@ -107,7 +109,8 @@ export default function App() {
               <Route path="work-locations" element={<Suspense fallback={<PortalLoading />}><AdminWorkLocations /></Suspense>} />
               <Route path="role-assignments" element={<Suspense fallback={<PortalLoading />}><AdminRoleAssignments /></Suspense>} />
               <Route path="reports" element={<Suspense fallback={<PortalLoading />}><PortalReports role="admin" /></Suspense>} />
-              <Route path="payroll" element={<Navigate to="/admin/reports" replace />} />
+              <Route path="payroll" element={<Suspense fallback={<PortalLoading />}><PayrollRuns role="admin" /></Suspense>} />
+              <Route path="payroll/:id" element={<Suspense fallback={<PortalLoading />}><PayrollRunDetails role="admin" /></Suspense>} />
               <Route path="audit-logs" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="settings" element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="users" element={<Suspense fallback={<PortalLoading />}><AdminUsers /></Suspense>} />
@@ -139,12 +142,41 @@ export default function App() {
               />
               <Route path="attendance" element={<Suspense fallback={<PortalLoading />}><HrAttendance /></Suspense>} />
               <Route path="reports" element={<Suspense fallback={<PortalLoading />}><PortalReports role="hr" /></Suspense>} />
-              <Route path="payroll" element={<Navigate to="/hr/reports" replace />} />
+              <Route path="payroll" element={<Suspense fallback={<PortalLoading />}><PayrollRuns role="hr" /></Suspense>} />
+              <Route path="payroll/:id" element={<Suspense fallback={<PortalLoading />}><PayrollRunDetails role="hr" /></Suspense>} />
               <Route path="settings" element={<Navigate to="/hr/dashboard" replace />} />
               <Route path="profile" element={<Suspense fallback={<PortalLoading />}><PortalProfile role="hr" /></Suspense>} />
             </Route>
           </Route>
-        </Route>
+          <Route path="/payroll" element={<ProtectedRoute requiredRole="payroll" />}>
+            <Route
+              element={(
+                <Suspense fallback={<PortalLoading />}>
+                  <PortalShell role="payroll" />
+                </Suspense>
+              )}
+            >
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<Suspense fallback={<PortalLoading />}><PayrollRuns role="payroll" /></Suspense>} />
+              <Route path="runs/:id" element={<Suspense fallback={<PortalLoading />}><PayrollRunDetails role="payroll" /></Suspense>} />
+              <Route path="profile" element={<Suspense fallback={<PortalLoading />}><PortalProfile role="payroll" /></Suspense>} />
+            </Route>
+          </Route>
+          <Route path="/executive" element={<ProtectedRoute requiredRole="executive" />}>
+            <Route
+              element={(
+                <Suspense fallback={<PortalLoading />}>
+                  <PortalShell role="executive" />
+                </Suspense>
+              )}
+            >
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<Suspense fallback={<PortalLoading />}><PayrollRuns role="executive" /></Suspense>} />
+              <Route path="payroll/:id" element={<Suspense fallback={<PortalLoading />}><PayrollRunDetails role="executive" /></Suspense>} />
+              <Route path="profile" element={<Suspense fallback={<PortalLoading />}><PortalProfile role="executive" /></Suspense>} />
+            </Route>
+          </Route>
+        </Route>01
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
