@@ -110,6 +110,8 @@ function getIsoDateInTimeZone(
 
 function calculateDay(
   events: LiveAttendanceEventResponse[],
+  workDate: string,
+  timeZoneId: string,
 ): Pick<
   AttendanceDayRow,
   | 'status'
@@ -127,13 +129,33 @@ function calculateDay(
   let status: AttendanceDayStatus = 'Incomplete';
   let workStartedAt: number | null = null;
   let breakStartedAt: number | null = null;
+  let hasStartedBreak = false;
   let workedDurationMinutes = 0;
   let invalidSequence = false;
   let clockInAtUtc: string | null = null;
   let clockOutAtUtc: string | null = null;
 
+  const autoCloseBreak = (timestamp: number) => {
+    if (breakStartedAt === null) {
+      return;
+    }
+
+    const automaticEndMs =
+      breakStartedAt + 60 * 60 * 1000;
+
+    if (timestamp < automaticEndMs) {
+      return;
+    }
+
+    breakStartedAt = null;
+    workStartedAt = automaticEndMs;
+    status = 'Working';
+  };
+
   for (const event of ordered) {
     const timestamp = new Date(event.capturedAtUtc).getTime();
+
+    autoCloseBreak(timestamp);
 
     switch (event.eventType) {
       case 'ClockIn':
@@ -147,7 +169,11 @@ function calculateDay(
         break;
 
       case 'BreakStart':
-        if (workStartedAt === null || breakStartedAt !== null) {
+        if (
+          workStartedAt === null ||
+          breakStartedAt !== null ||
+          hasStartedBreak
+        ) {
           invalidSequence = true;
           break;
         }
@@ -157,14 +183,30 @@ function calculateDay(
         );
         workStartedAt = null;
         breakStartedAt = timestamp;
+        hasStartedBreak = true;
         status = 'OnBreak';
         break;
 
       case 'BreakEnd':
-        if (breakStartedAt === null || workStartedAt !== null) {
+        if (
+          breakStartedAt === null &&
+          workStartedAt !== null &&
+          hasStartedBreak
+        ) {
+          // The backend may already have auto-ended the
+          // one-hour break. A late historical BreakEnd
+          // should not invalidate the whole day.
+          break;
+        }
+
+        if (
+          breakStartedAt === null ||
+          workStartedAt !== null
+        ) {
           invalidSequence = true;
           break;
         }
+
         breakStartedAt = null;
         workStartedAt = timestamp;
         status = 'Working';
@@ -188,6 +230,8 @@ function calculateDay(
         invalidSequence = true;
     }
   }
+
+  autoCloseBreak(Date.now());
 
   if (invalidSequence) {
     status = 'InvalidSequence';
@@ -250,7 +294,11 @@ export function buildAttendanceDayRows(
         locationsById.get(employee.workLocationId)?.timeZoneId ??
         'Africa/Johannesburg';
       const workDate = key.slice(key.lastIndexOf(':') + 1);
-      const calculation = calculateDay(dayEvents);
+      const calculation = calculateDay(
+        dayEvents,
+        workDate,
+        timeZoneId,
+      );
 
       return {
         id: key,

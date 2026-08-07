@@ -1,4 +1,4 @@
-import { CalendarDays, CircleAlert, RefreshCw } from 'lucide-react';
+import { CalendarDays, CircleAlert, Coffee, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
@@ -7,6 +7,8 @@ import NoticeBanner from '../components/NoticeBanner';
 import ScreenHeader from '../components/ScreenHeader';
 import { useSession } from '../context/SessionContext';
 import { getAdminEmployees, type AdminEmployeeResponse } from '../services/adminEmployeesApi';
+import { getTodayAttendance } from '../services/attendanceApi';
+import { overrideLunchBreak } from '../services/lunchBreakOverrideApi';
 import {
   aggregateAttendanceByEmployee,
   buildAttendanceDayRows,
@@ -25,6 +27,11 @@ export default function SupervisorTeamAttendance() {
   const [rows, setRows] = useState<EmployeeAttendanceAggregate[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [overrideMessage, setOverrideMessage] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
+  const [overridingLunch, setOverridingLunch] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadAttendance = useCallback(async () => {
@@ -62,6 +69,107 @@ export default function SupervisorTeamAttendance() {
     navigate(`/supervisor/team-attendance/${encodeURIComponent(selectedEmployeeId)}?${searchParams.toString()}`);
   }
 
+  async function handleLunchOverride() {
+    if (
+      !accessToken ||
+      !selectedEmployeeId ||
+      !selectedExists
+    ) {
+      return;
+    }
+
+    const employee =
+      employees.find(
+        (item) =>
+          item.id ===
+          selectedEmployeeId,
+      );
+
+    if (!employee) {
+      return;
+    }
+
+    setOverridingLunch(true);
+    setOverrideMessage(null);
+
+    try {
+      const today =
+        await getTodayAttendance(
+          employee.id,
+          accessToken,
+        );
+
+      let action:
+        | 'Start'
+        | 'End';
+
+      if (today.status === 'OnBreak') {
+        action = 'End';
+      } else if (
+        today.status === 'Working' &&
+        !today.hasTakenLunchBreak
+      ) {
+        action = 'Start';
+      } else {
+        setOverrideMessage({
+          text: today.hasTakenLunchBreak
+            ? `${employee.fullName}'s lunch break has already been completed today.`
+            : `${employee.fullName} must be actively working before a lunch break can be overridden.`,
+          error: true,
+        });
+        return;
+      }
+
+      const reason =
+        window.prompt(
+          `${action} lunch break for ${employee.fullName}.\n\nEnter the reason for this supervisor override:`,
+        )?.trim();
+
+      if (!reason) {
+        return;
+      }
+
+      if (reason.length < 3) {
+        setOverrideMessage({
+          text: 'The override reason must contain at least 3 characters.',
+          error: true,
+        });
+        return;
+      }
+
+      const result =
+        await overrideLunchBreak(
+          accessToken,
+          {
+            employeeId:
+              employee.id,
+            action,
+            reason,
+          },
+        );
+
+      setOverrideMessage({
+        text:
+          action === 'Start'
+            ? `Lunch break started for ${result.employeeName}. It will end automatically after ${result.lunchBreakMaximumMinutes} minutes unless ended earlier.`
+            : `Lunch break ended for ${result.employeeName}.`,
+        error: false,
+      });
+
+      await loadAttendance();
+    } catch (error) {
+      setOverrideMessage({
+        text:
+          error instanceof Error
+            ? error.message
+            : 'The lunch break override could not be completed.',
+        error: true,
+      });
+    } finally {
+      setOverridingLunch(false);
+    }
+  }
+
   return (
     <AppShell>
       <ScreenHeader title="Employee Attendance" backTo="/supervisor/dashboard" />
@@ -76,6 +184,19 @@ export default function SupervisorTeamAttendance() {
       </div>
 
       {loadError ? <NoticeBanner icon={<CircleAlert className="h-5 w-5" />} className="mt-4" role="alert">{loadError}</NoticeBanner> : null}
+      {overrideMessage ? (
+        <NoticeBanner
+          icon={
+            overrideMessage.error
+              ? <CircleAlert className="h-5 w-5" />
+              : <Coffee className="h-5 w-5" />
+          }
+          className="mt-4"
+          role="status"
+        >
+          {overrideMessage.text}
+        </NoticeBanner>
+      ) : null}
 
       <div className="mt-4 overflow-hidden rounded-card border border-light-grey bg-white shadow-sm">
         <table className="w-full table-fixed text-[10px]" data-row-count={rows.length}>
@@ -100,7 +221,22 @@ export default function SupervisorTeamAttendance() {
         </table>
       </div>
 
-      <div className="pb-2 pt-4"><Button onClick={viewSelectedEmployee} disabled={!selectedExists} className="disabled:cursor-not-allowed disabled:bg-light-grey disabled:text-dark-grey disabled:shadow-none">VIEW DETAILS</Button></div>
+      <div className="grid gap-3 pb-2 pt-4 sm:grid-cols-2">
+        <Button
+          onClick={viewSelectedEmployee}
+          disabled={!selectedExists}
+          className="disabled:cursor-not-allowed disabled:bg-light-grey disabled:text-dark-grey disabled:shadow-none"
+        >
+          VIEW DETAILS
+        </Button>
+        <Button
+          onClick={() => void handleLunchOverride()}
+          disabled={!selectedExists || overridingLunch}
+          className="disabled:cursor-not-allowed disabled:bg-light-grey disabled:text-dark-grey disabled:shadow-none"
+        >
+          {overridingLunch ? 'CHECKING LUNCH…' : 'OVERRIDE LUNCH'}
+        </Button>
+      </div>
       <p className="pb-4 text-[10px] leading-4 text-dark-grey">The system shows only recorded attendance. It does not label employees absent without approved shift, leave, holiday, and work-schedule data.</p>
     </AppShell>
   );
