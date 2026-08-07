@@ -7,6 +7,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   employee: 'Employee',
   supervisor: 'Supervisor',
   hr: 'HR',
+  payroll: 'Payroll',
+  executive: 'Executive',
   admin: 'Admin',
 };
 

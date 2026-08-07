@@ -1,4 +1,5 @@
 import {
+  Banknote,
   Building2,
   CalendarClock,
   FileBarChart,
@@ -31,6 +32,8 @@ type PortalShellProps = {
 const PORTAL_LABELS: Record<PortalRole, string> = {
   admin: 'Admin Portal',
   hr: 'HR Portal',
+  payroll: 'Payroll Portal',
+  executive: 'Executive Portal',
 };
 
 const NAVIGATION_ICONS: Record<PortalNavigationIcon, LucideIcon> = {
@@ -41,6 +44,7 @@ const NAVIGATION_ICONS: Record<PortalNavigationIcon, LucideIcon> = {
   roles: ShieldCheck,
   attendance: CalendarClock,
   reports: FileBarChart,
+  payroll: Banknote,
   users: UserCog,
   profile: UserCircle,
 };
@@ -64,9 +68,14 @@ function PortalNavLink({ item }: { item: PortalNavigationItem }) {
 
 export default function PortalShell({ role }: PortalShellProps) {
   const logout = useLogout();
-  const { employeeNumber } = useSession();
+  const { employeeNumber, email } = useSession();
   const navigationItems = getPortalNavigationItems(role, ADMIN_HR_PORTALS_ENABLED);
-  const PortalIcon = role === 'admin' ? ShieldCheck : Users;
+  const PortalIcon = {
+    admin: ShieldCheck,
+    hr: Users,
+    payroll: Banknote,
+    executive: FileBarChart,
+  }[role];
 
   return (
     <main className="min-h-dvh bg-cream-white text-black">
@@ -91,7 +100,9 @@ export default function PortalShell({ role }: PortalShellProps) {
 
           <div className="mt-auto space-y-3 border-t border-light-grey pt-5">
             <RoleSwitcher />
-            <p className="truncate px-1 text-xs text-dark-grey">Employee No. {employeeNumber}</p>
+            <p className="truncate px-1 text-xs text-dark-grey">
+              {employeeNumber ? `Employee No. ${employeeNumber}` : email ?? 'Authenticated account'}
+            </p>
             <button
               type="button"
               onClick={() => logout()}
