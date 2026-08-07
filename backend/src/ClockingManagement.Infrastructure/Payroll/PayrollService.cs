@@ -857,10 +857,18 @@ public sealed class PayrollService
                     ? boundary.EndUtc
                     : nowUtc;
 
+            var lunchBreakWindow =
+                LunchBreakPolicy.GetWindow(
+                    _workdayTimeService,
+                    context.Employee
+                        .WorkLocation.TimeZoneId,
+                    workDate);
+
             var dayCalculation =
                 _attendanceSessionCalculator.Calculate(
                     dayEvents,
-                    effectiveCurrentUtc);
+                    effectiveCurrentUtc,
+                    lunchBreakWindow.EndsAtUtc);
 
             if (dayCalculation.HasInvalidSequence)
             {

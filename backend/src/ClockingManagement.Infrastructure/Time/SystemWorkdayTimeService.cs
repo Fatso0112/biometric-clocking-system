@@ -101,6 +101,33 @@ public sealed class SystemWorkdayTimeService
                     endUtcDateTime));
     }
 
+    public DateTimeOffset GetUtcForLocalTime(
+        string timeZoneId,
+        DateOnly localDate,
+        TimeOnly localTime)
+    {
+        var timeZone =
+            ResolveTimeZone(timeZoneId);
+
+        var localDateTime =
+            DateTime.SpecifyKind(
+                localDate.ToDateTime(localTime),
+                DateTimeKind.Unspecified);
+
+        if (timeZone.IsInvalidTime(localDateTime))
+        {
+            throw new InvalidTimeZoneException(
+                $"The local time '{localDateTime:yyyy-MM-dd HH:mm:ss}' is invalid in timezone '{timeZoneId}'.");
+        }
+
+        var utcDateTime =
+            TimeZoneInfo.ConvertTimeToUtc(
+                localDateTime,
+                timeZone);
+
+        return new DateTimeOffset(utcDateTime);
+    }
+
     private static TimeZoneInfo ResolveTimeZone(
         string timeZoneId)
     {

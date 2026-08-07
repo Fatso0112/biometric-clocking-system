@@ -8,7 +8,8 @@ public sealed class AttendanceSessionCalculator
 {
     public AttendanceDayCalculation Calculate(
         IReadOnlyCollection<AttendanceEvent> events,
-        DateTimeOffset effectiveCurrentUtc)
+        DateTimeOffset effectiveCurrentUtc,
+        DateTimeOffset? automaticBreakEndUtc = null)
     {
         var orderedEvents = events
             .Where(attendanceEvent =>
@@ -34,12 +35,22 @@ public sealed class AttendanceSessionCalculator
         DateTimeOffset? latestClockOutAt = null;
 
         var hasClockedIn = false;
+        var hasStartedBreak = false;
         var hasInvalidSequence = false;
 
         foreach (var attendanceEvent in orderedEvents)
         {
             var eventTime =
                 attendanceEvent.CapturedAtUtc;
+
+            AutoCloseBreakIfRequired(
+                eventTime,
+                automaticBreakEndUtc,
+                ref state,
+                ref totalBreakTime,
+                ref workSegmentStartedAt,
+                ref openBreakStartedAt,
+                ref latestBreakEndedAt);
 
             switch (attendanceEvent.EventType)
             {
@@ -71,7 +82,13 @@ public sealed class AttendanceSessionCalculator
                 {
                     if (state !=
                             CalculationState.Working ||
-                        workSegmentStartedAt is null)
+                        workSegmentStartedAt is null ||
+                        hasStartedBreak ||
+                        (automaticBreakEndUtc.HasValue &&
+                         (eventTime <
+                            automaticBreakEndUtc.Value.AddHours(-1) ||
+                          eventTime >=
+                            automaticBreakEndUtc.Value)))
                     {
                         hasInvalidSequence = true;
                         continue;
@@ -89,6 +106,7 @@ public sealed class AttendanceSessionCalculator
                         eventTime;
 
                     workSegmentStartedAt = null;
+                    hasStartedBreak = true;
 
                     state =
                         CalculationState.OnBreak;
@@ -160,6 +178,15 @@ public sealed class AttendanceSessionCalculator
             }
         }
 
+        AutoCloseBreakIfRequired(
+            effectiveCurrentUtc,
+            automaticBreakEndUtc,
+            ref state,
+            ref totalBreakTime,
+            ref workSegmentStartedAt,
+            ref openBreakStartedAt,
+            ref latestBreakEndedAt);
+
         if (state == CalculationState.Working &&
             workSegmentStartedAt is not null)
         {
@@ -208,6 +235,37 @@ public sealed class AttendanceSessionCalculator
                     CalculationState.OnBreak,
             HasInvalidSequence:
                 hasInvalidSequence);
+    }
+
+    private static void AutoCloseBreakIfRequired(
+        DateTimeOffset effectiveTimeUtc,
+        DateTimeOffset? automaticBreakEndUtc,
+        ref CalculationState state,
+        ref TimeSpan totalBreakTime,
+        ref DateTimeOffset? workSegmentStartedAt,
+        ref DateTimeOffset? openBreakStartedAt,
+        ref DateTimeOffset? latestBreakEndedAt)
+    {
+        if (state != CalculationState.OnBreak ||
+            openBreakStartedAt is null ||
+            !automaticBreakEndUtc.HasValue ||
+            effectiveTimeUtc < automaticBreakEndUtc.Value)
+        {
+            return;
+        }
+
+        var breakEndUtc =
+            automaticBreakEndUtc.Value;
+
+        AddDuration(
+            ref totalBreakTime,
+            openBreakStartedAt.Value,
+            breakEndUtc);
+
+        latestBreakEndedAt = breakEndUtc;
+        openBreakStartedAt = null;
+        workSegmentStartedAt = breakEndUtc;
+        state = CalculationState.Working;
     }
 
     private static string DetermineStatus(
