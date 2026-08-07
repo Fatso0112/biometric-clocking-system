@@ -18,4 +18,9 @@ public interface IWorkdayTimeService
     WorkdayBoundary GetWorkday(
         string timeZoneId,
         DateOnly localDate);
+
+    DateTimeOffset GetUtcForLocalTime(
+        string timeZoneId,
+        DateOnly localDate,
+        TimeOnly localTime);
 }

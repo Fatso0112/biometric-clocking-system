@@ -71,4 +71,7 @@ public sealed record TodayAttendanceSummaryResponse(
     int WorkedDurationMinutes,
     bool HasOpenBreak,
     bool HasMissingClockOut,
-    bool HasInvalidSequence);
+    bool HasInvalidSequence,
+    DateTimeOffset LunchBreakStartsAtUtc,
+    DateTimeOffset LunchBreakEndsAtUtc,
+    bool HasTakenLunchBreak);
