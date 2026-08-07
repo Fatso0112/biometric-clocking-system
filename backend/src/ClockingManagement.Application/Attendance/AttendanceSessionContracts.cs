@@ -18,6 +18,5 @@ public interface IAttendanceSessionCalculator
 {
     AttendanceDayCalculation Calculate(
         IReadOnlyCollection<AttendanceEvent> events,
-        DateTimeOffset effectiveCurrentUtc,
-        DateTimeOffset? automaticBreakEndUtc = null);
+        DateTimeOffset effectiveCurrentUtc);
 }

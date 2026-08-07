@@ -208,12 +208,6 @@ public sealed class AttendanceController
                     employee.WorkLocation.TimeZoneId,
                     currentUtc);
 
-        var currentLunchWindow =
-            LunchBreakPolicy.GetWindow(
-                _workdayTimeService,
-                employee.WorkLocation.TimeZoneId,
-                currentWorkday.LocalDate);
-
         var todayEvents =
             await _dbContext.AttendanceEvents
                 .AsNoTracking()
@@ -234,8 +228,7 @@ public sealed class AttendanceController
         var calculation =
             _attendanceSessionCalculator.Calculate(
                 todayEvents,
-                currentUtc,
-                currentLunchWindow.EndsAtUtc);
+                currentUtc);
 
         var latestEvent =
             todayEvents
@@ -472,18 +465,6 @@ public sealed class AttendanceController
                 employee.WorkLocation.TimeZoneId,
                 currentWorkday.LocalDate.AddDays(-1));
 
-        var currentLunchWindow =
-            LunchBreakPolicy.GetWindow(
-                _workdayTimeService,
-                employee.WorkLocation.TimeZoneId,
-                currentWorkday.LocalDate);
-
-        var previousLunchWindow =
-            LunchBreakPolicy.GetWindow(
-                _workdayTimeService,
-                employee.WorkLocation.TimeZoneId,
-                previousWorkday.LocalDate);
-
         var attendanceEvents =
             await _dbContext.AttendanceEvents
                 .AsNoTracking()
@@ -522,14 +503,18 @@ public sealed class AttendanceController
         var todayCalculation =
             _attendanceSessionCalculator.Calculate(
                 todayEvents,
-                currentUtc,
-                currentLunchWindow.EndsAtUtc);
+                currentUtc);
 
         var previousCalculation =
             _attendanceSessionCalculator.Calculate(
                 previousDayEvents,
-                previousWorkday.EndUtc,
-                previousLunchWindow.EndsAtUtc);
+                previousWorkday.EndUtc);
+
+        var lunchBreakEndsAtUtc =
+            todayCalculation.BreakStartedAtUtc.HasValue
+                ? LunchBreakPolicy.GetAutomaticEndUtc(
+                    todayCalculation.BreakStartedAtUtc.Value)
+                : (DateTimeOffset?)null;
 
         var response =
             new TodayAttendanceSummaryResponse(
@@ -563,10 +548,10 @@ public sealed class AttendanceController
                     previousCalculation.HasOpenSession,
                 HasInvalidSequence:
                     todayCalculation.HasInvalidSequence,
-                LunchBreakStartsAtUtc:
-                    currentLunchWindow.StartsAtUtc,
+                LunchBreakMaximumMinutes:
+                    LunchBreakPolicy.MaximumDurationMinutes,
                 LunchBreakEndsAtUtc:
-                    currentLunchWindow.EndsAtUtc,
+                    lunchBreakEndsAtUtc,
                 HasTakenLunchBreak:
                     todayEvents.Any(attendanceEvent =>
                         attendanceEvent.EventType ==
@@ -763,29 +748,15 @@ public sealed class AttendanceController
                             boundaries.Previous.EndUtc)
                     .ToList();
 
-            var currentLunchWindow =
-                LunchBreakPolicy.GetWindow(
-                    _workdayTimeService,
-                    employee.WorkLocation.TimeZoneId,
-                    boundaries.Current.LocalDate);
-
-            var previousLunchWindow =
-                LunchBreakPolicy.GetWindow(
-                    _workdayTimeService,
-                    employee.WorkLocation.TimeZoneId,
-                    boundaries.Previous.LocalDate);
-
             var currentCalculation =
                 _attendanceSessionCalculator.Calculate(
                     currentDayEvents,
-                    currentUtc,
-                    currentLunchWindow.EndsAtUtc);
+                    currentUtc);
 
             var previousCalculation =
                 _attendanceSessionCalculator.Calculate(
                     previousDayEvents,
-                    boundaries.Previous.EndUtc,
-                    previousLunchWindow.EndsAtUtc);
+                    boundaries.Previous.EndUtc);
 
             switch (currentCalculation.Status)
             {
@@ -1075,18 +1046,6 @@ public sealed class AttendanceController
                     employee.WorkLocation.TimeZoneId,
                     currentWorkday.LocalDate.AddDays(-1));
 
-        var currentLunchWindow =
-            LunchBreakPolicy.GetWindow(
-                _workdayTimeService,
-                employee.WorkLocation.TimeZoneId,
-                currentWorkday.LocalDate);
-
-        var previousLunchWindow =
-            LunchBreakPolicy.GetWindow(
-                _workdayTimeService,
-                employee.WorkLocation.TimeZoneId,
-                previousWorkday.LocalDate);
-
         var relevantAttendanceEvents =
             await _dbContext.AttendanceEvents
                 .AsNoTracking()
@@ -1125,8 +1084,7 @@ public sealed class AttendanceController
         var previousDayCalculation =
             _attendanceSessionCalculator.Calculate(
                 previousDayEvents,
-                previousWorkday.EndUtc,
-                previousLunchWindow.EndsAtUtc);
+                previousWorkday.EndUtc);
 
         if (previousDayCalculation.HasOpenSession &&
             todayEvents.Count == 0)
@@ -1156,8 +1114,7 @@ public sealed class AttendanceController
         var todayCalculation =
             _attendanceSessionCalculator.Calculate(
                 todayEvents,
-                now,
-                currentLunchWindow.EndsAtUtc);
+                now);
 
         if (todayCalculation.HasInvalidSequence)
         {
@@ -1199,66 +1156,36 @@ public sealed class AttendanceController
                     "The employee has already taken today's lunch break.",
                 workDate =
                     currentWorkday.LocalDate,
-                lunchBreakStartsAtUtc =
-                    currentLunchWindow.StartsAtUtc,
-                lunchBreakEndsAtUtc =
-                    currentLunchWindow.EndsAtUtc
+                lunchBreakMaximumMinutes =
+                    LunchBreakPolicy.MaximumDurationMinutes
             });
         }
 
-        if (requestedEvent ==
-                AttendanceEventType.BreakStart &&
-            now < currentLunchWindow.StartsAtUtc)
-        {
-            return Conflict(new
-            {
-                errorCode =
-                    "LUNCH_BREAK_NOT_OPEN",
-                message =
-                    "Lunch break may be started only from 12:00 PM to 1:00 PM in the employee's work-location timezone.",
-                workDate =
-                    currentWorkday.LocalDate,
-                lunchBreakStartsAtUtc =
-                    currentLunchWindow.StartsAtUtc,
-                lunchBreakEndsAtUtc =
-                    currentLunchWindow.EndsAtUtc
-            });
-        }
-
-        if (requestedEvent ==
-                AttendanceEventType.BreakStart &&
-            now >= currentLunchWindow.EndsAtUtc)
-        {
-            return Conflict(new
-            {
-                errorCode =
-                    "LUNCH_BREAK_WINDOW_CLOSED",
-                message =
-                    "Today's lunch-break window has closed. Lunch must start before 1:00 PM.",
-                workDate =
-                    currentWorkday.LocalDate,
-                lunchBreakStartsAtUtc =
-                    currentLunchWindow.StartsAtUtc,
-                lunchBreakEndsAtUtc =
-                    currentLunchWindow.EndsAtUtc
-            });
-        }
+        var automaticLunchEndUtc =
+            todayCalculation.BreakStartedAtUtc.HasValue
+                ? LunchBreakPolicy.GetAutomaticEndUtc(
+                    todayCalculation.BreakStartedAtUtc.Value)
+                : (DateTimeOffset?)null;
 
         if (requestedEvent ==
                 AttendanceEventType.BreakEnd &&
             hasTakenLunchBreak &&
-            now >= currentLunchWindow.EndsAtUtc)
+            todayCalculation.Status == "Working" &&
+            automaticLunchEndUtc.HasValue &&
+            now >= automaticLunchEndUtc.Value)
         {
             return Conflict(new
             {
                 errorCode =
                     "LUNCH_BREAK_ALREADY_ENDED",
                 message =
-                    "The lunch break ended automatically at 1:00 PM.",
+                    "The lunch break has already ended automatically after the one-hour maximum.",
                 workDate =
                     currentWorkday.LocalDate,
                 lunchBreakEndsAtUtc =
-                    currentLunchWindow.EndsAtUtc
+                    automaticLunchEndUtc.Value,
+                lunchBreakMaximumMinutes =
+                    LunchBreakPolicy.MaximumDurationMinutes
             });
         }
 
@@ -1267,8 +1194,7 @@ public sealed class AttendanceController
 
         if (effectiveLatestEventType ==
                 AttendanceEventType.BreakStart &&
-            todayCalculation.Status == "Working" &&
-            now >= currentLunchWindow.EndsAtUtc)
+            todayCalculation.Status == "Working")
         {
             effectiveLatestEventType =
                 AttendanceEventType.BreakEnd;
@@ -1666,6 +1592,7 @@ public sealed class AttendanceController
             item.DistanceFromWorkLocationMetres,
             item.IsInsideGeofence,
             item.CapturedAtUtc,
-            message);
+            message,
+            item.Notes);
     }
 }
