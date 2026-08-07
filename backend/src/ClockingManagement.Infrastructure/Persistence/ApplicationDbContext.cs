@@ -73,4 +73,12 @@ public sealed class ApplicationDbContext
         modelBuilder.ApplyConfigurationsFromAssembly(
             typeof(ApplicationDbContext).Assembly);
     }
-}
+    public DbSet<PayrollRun> PayrollRuns =>
+    Set<PayrollRun>();
+
+    public DbSet<PayrollEntry> PayrollEntries =>
+        Set<PayrollEntry>();
+
+    public DbSet<PayRateHistory> PayRateHistory =>
+        Set<PayRateHistory>();
+    }

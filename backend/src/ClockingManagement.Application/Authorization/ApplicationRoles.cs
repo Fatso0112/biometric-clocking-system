@@ -62,6 +62,9 @@ public static class AuthorizationPolicies
     public const string ManageUserRoles =
         "ManageUserRoles";
 
+    public const string ResetEmployeePasswords =
+        "ResetEmployeePasswords";
+
     public const string ViewEmployees =
         "ViewEmployees";
 
@@ -73,4 +76,13 @@ public static class AuthorizationPolicies
 
     public const string ViewAttendanceDashboard =
         "ViewAttendanceDashboard";
+
+    public const string ViewPayroll =
+        "ViewPayroll";
+
+    public const string ManagePayroll =
+        "ManagePayroll";
+
+    public const string ApprovePayroll =
+        "ApprovePayroll";
 }
