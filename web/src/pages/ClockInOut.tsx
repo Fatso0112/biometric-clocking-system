@@ -7,7 +7,12 @@ import {
   RefreshCw,
   Timer,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Card from '../components/Card';
@@ -21,11 +26,16 @@ import {
   type TodayAttendanceResponse,
 } from '../services/attendanceApi';
 import { ApiError } from '../services/httpClient';
+import { formatLunchCountdown } from '../utils/lunchBreakPolicy';
 
-function formatTime(value: string | null): string {
+function formatTime(
+  value: string | null,
+  timeZoneId?: string,
+): string {
   if (!value) return '—';
 
   return new Date(value).toLocaleTimeString('en-ZA', {
+    timeZone: timeZoneId,
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -66,6 +76,8 @@ export default function ClockInOut() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasRequestedLunchEndRefresh = useRef(false);
 
   const loadToday = useCallback(async () => {
     if (!employeeId || !accessToken) {
@@ -95,6 +107,49 @@ export default function ClockInOut() {
     void loadToday();
   }, [loadToday]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const lunchEndMs =
+    summary?.lunchBreakEndsAtUtc
+      ? new Date(
+          summary.lunchBreakEndsAtUtc,
+        ).getTime()
+      : Number.NaN;
+
+  const lunchRemainingSeconds =
+    Number.isFinite(lunchEndMs)
+      ? Math.max(
+          0,
+          Math.ceil(
+            (lunchEndMs - nowMs) /
+              1000,
+          ),
+        )
+      : 0;
+
+  useEffect(() => {
+    if (summary?.status !== 'OnBreak') {
+      hasRequestedLunchEndRefresh.current = false;
+      return;
+    }
+
+    if (
+      lunchRemainingSeconds > 0 ||
+      hasRequestedLunchEndRefresh.current
+    ) {
+      return;
+    }
+
+    hasRequestedLunchEndRefresh.current = true;
+    void loadToday();
+  }, [loadToday, lunchRemainingSeconds, summary?.status]);
+
   function startAction(action: LiveAttendanceAction) {
     navigate('/location-check', {
       state: { intendedAction: action },
@@ -102,6 +157,11 @@ export default function ClockInOut() {
   }
 
   const status = summary?.status;
+  const canStartLunch = Boolean(
+    summary &&
+      summary.status === 'Working' &&
+      !summary.hasTakenLunchBreak,
+  );
 
   return (
     <AppShell>
@@ -149,7 +209,10 @@ export default function ClockInOut() {
               <Clock3 className="h-5 w-5" strokeWidth={1.5} />
               <p className="mt-2 text-dark-grey">Clock in</p>
               <p className="mt-1 font-semibold">
-                {formatTime(summary.clockInAtUtc)}
+                {formatTime(
+                  summary.clockInAtUtc,
+                  summary.timeZoneId,
+                )}
               </p>
             </div>
 
@@ -157,7 +220,10 @@ export default function ClockInOut() {
               <LogOut className="h-5 w-5" strokeWidth={1.5} />
               <p className="mt-2 text-dark-grey">Clock out</p>
               <p className="mt-1 font-semibold">
-                {formatTime(summary.clockOutAtUtc)}
+                {formatTime(
+                  summary.clockOutAtUtc,
+                  summary.timeZoneId,
+                )}
               </p>
             </div>
 
@@ -179,6 +245,34 @@ export default function ClockInOut() {
           </div>
         ) : null}
       </Card>
+
+      {summary?.status === 'OnBreak' ? (
+        <Card className="mt-4 p-5 text-center">
+          <Coffee
+            className="mx-auto h-7 w-7"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-dark-grey">
+            Lunch break time remaining
+          </p>
+          <p
+            className="mt-2 text-4xl font-bold tabular-nums"
+            aria-live="polite"
+          >
+            {formatLunchCountdown(lunchRemainingSeconds)}
+          </p>
+          <p className="mt-2 text-sm text-dark-grey">
+            Break ends automatically after{' '}
+            {summary.lunchBreakMaximumMinutes} minutes
+            at{' '}
+            {formatTime(
+              summary.lunchBreakEndsAtUtc,
+              summary.timeZoneId,
+            )}.
+          </p>
+        </Card>
+      ) : null}
 
       {errorMessage ? (
         <NoticeBanner
@@ -217,12 +311,22 @@ export default function ClockInOut() {
 
             {summary.status === 'Working' ? (
               <>
-                <ListItem
-                  icon={<Coffee className="h-8 w-8" strokeWidth={1.5} />}
-                  title="START BREAK"
-                  subtitle="Start your lunch break"
-                  onClick={() => startAction('breakStart')}
-                />
+                {canStartLunch ? (
+                  <ListItem
+                    icon={<Coffee className="h-8 w-8" strokeWidth={1.5} />}
+                    title="START BREAK"
+                    subtitle={`Up to ${summary.lunchBreakMaximumMinutes} minutes`}
+                    onClick={() => startAction('breakStart')}
+                  />
+                ) : null}
+
+                {summary.hasTakenLunchBreak ? (
+                  <NoticeBanner
+                    icon={<Coffee className="h-5 w-5" strokeWidth={1.5} />}
+                  >
+                    Today’s lunch break has already been used. Each workday allows one lunch break of up to {summary.lunchBreakMaximumMinutes} minutes.
+                  </NoticeBanner>
+                ) : null}
 
                 <ListItem
                   icon={<LogOut className="h-8 w-8" strokeWidth={1.5} />}
@@ -233,11 +337,12 @@ export default function ClockInOut() {
               </>
             ) : null}
 
-            {summary.status === 'OnBreak' ? (
+            {summary.status === 'OnBreak' &&
+            lunchRemainingSeconds > 0 ? (
               <ListItem
                 icon={<Coffee className="h-8 w-8" strokeWidth={1.5} />}
                 title="END BREAK"
-                subtitle="Return to work"
+                subtitle="Return to work early"
                 onClick={() => startAction('breakEnd')}
               />
             ) : null}

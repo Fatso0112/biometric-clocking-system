@@ -8,8 +8,7 @@ public sealed class AttendanceSessionCalculator
 {
     public AttendanceDayCalculation Calculate(
         IReadOnlyCollection<AttendanceEvent> events,
-        DateTimeOffset effectiveCurrentUtc,
-        DateTimeOffset? automaticBreakEndUtc = null)
+        DateTimeOffset effectiveCurrentUtc)
     {
         var orderedEvents = events
             .Where(attendanceEvent =>
@@ -45,7 +44,6 @@ public sealed class AttendanceSessionCalculator
 
             AutoCloseBreakIfRequired(
                 eventTime,
-                automaticBreakEndUtc,
                 ref state,
                 ref totalBreakTime,
                 ref workSegmentStartedAt,
@@ -56,39 +54,26 @@ public sealed class AttendanceSessionCalculator
             {
                 case AttendanceEventType.ClockIn:
                 {
-                    if (state !=
-                        CalculationState.NotPresent)
+                    if (state != CalculationState.NotPresent)
                     {
                         hasInvalidSequence = true;
                         continue;
                     }
 
                     hasClockedIn = true;
-
                     firstClockInAt ??= eventTime;
-
-                    workSegmentStartedAt =
-                        eventTime;
-
+                    workSegmentStartedAt = eventTime;
                     openBreakStartedAt = null;
-
-                    state =
-                        CalculationState.Working;
+                    state = CalculationState.Working;
 
                     break;
                 }
 
                 case AttendanceEventType.BreakStart:
                 {
-                    if (state !=
-                            CalculationState.Working ||
+                    if (state != CalculationState.Working ||
                         workSegmentStartedAt is null ||
-                        hasStartedBreak ||
-                        (automaticBreakEndUtc.HasValue &&
-                         (eventTime <
-                            automaticBreakEndUtc.Value.AddHours(-1) ||
-                          eventTime >=
-                            automaticBreakEndUtc.Value)))
+                        hasStartedBreak)
                     {
                         hasInvalidSequence = true;
                         continue;
@@ -99,54 +84,52 @@ public sealed class AttendanceSessionCalculator
                         workSegmentStartedAt.Value,
                         eventTime);
 
-                    latestBreakStartedAt =
-                        eventTime;
-
-                    openBreakStartedAt =
-                        eventTime;
-
+                    latestBreakStartedAt = eventTime;
+                    openBreakStartedAt = eventTime;
                     workSegmentStartedAt = null;
                     hasStartedBreak = true;
-
-                    state =
-                        CalculationState.OnBreak;
+                    state = CalculationState.OnBreak;
 
                     break;
                 }
 
                 case AttendanceEventType.BreakEnd:
                 {
-                    if (state !=
-                            CalculationState.OnBreak ||
-                        openBreakStartedAt is null)
+                    if (state == CalculationState.OnBreak &&
+                        openBreakStartedAt is not null)
                     {
-                        hasInvalidSequence = true;
-                        continue;
+                        AddDuration(
+                            ref totalBreakTime,
+                            openBreakStartedAt.Value,
+                            eventTime);
+
+                        latestBreakEndedAt = eventTime;
+                        openBreakStartedAt = null;
+                        workSegmentStartedAt = eventTime;
+                        state = CalculationState.Working;
+
+                        break;
                     }
 
-                    AddDuration(
-                        ref totalBreakTime,
-                        openBreakStartedAt.Value,
-                        eventTime);
+                    // A manual BreakEnd that arrives after the one-hour
+                    // automatic cutoff is harmless. The break has already
+                    // been closed by the policy and work resumed at the
+                    // automatic end time.
+                    if (state == CalculationState.Working &&
+                        hasStartedBreak &&
+                        latestBreakEndedAt.HasValue &&
+                        eventTime >= latestBreakEndedAt.Value)
+                    {
+                        break;
+                    }
 
-                    latestBreakEndedAt =
-                        eventTime;
-
-                    openBreakStartedAt = null;
-
-                    workSegmentStartedAt =
-                        eventTime;
-
-                    state =
-                        CalculationState.Working;
-
+                    hasInvalidSequence = true;
                     break;
                 }
 
                 case AttendanceEventType.ClockOut:
                 {
-                    if (state !=
-                            CalculationState.Working ||
+                    if (state != CalculationState.Working ||
                         workSegmentStartedAt is null)
                     {
                         hasInvalidSequence = true;
@@ -158,14 +141,10 @@ public sealed class AttendanceSessionCalculator
                         workSegmentStartedAt.Value,
                         eventTime);
 
-                    latestClockOutAt =
-                        eventTime;
-
+                    latestClockOutAt = eventTime;
                     workSegmentStartedAt = null;
                     openBreakStartedAt = null;
-
-                    state =
-                        CalculationState.NotPresent;
+                    state = CalculationState.NotPresent;
 
                     break;
                 }
@@ -180,7 +159,6 @@ public sealed class AttendanceSessionCalculator
 
         AutoCloseBreakIfRequired(
             effectiveCurrentUtc,
-            automaticBreakEndUtc,
             ref state,
             ref totalBreakTime,
             ref workSegmentStartedAt,
@@ -214,21 +192,15 @@ public sealed class AttendanceSessionCalculator
         return new AttendanceDayCalculation(
             Status: status,
             ClockInAtUtc: firstClockInAt,
-            BreakStartedAtUtc:
-                latestBreakStartedAt,
-            BreakEndedAtUtc:
-                latestBreakEndedAt,
-            ClockOutAtUtc:
-                latestClockOutAt,
+            BreakStartedAtUtc: latestBreakStartedAt,
+            BreakEndedAtUtc: latestBreakEndedAt,
+            ClockOutAtUtc: latestClockOutAt,
             TotalBreakMinutes:
-                ToWholeMinutes(
-                    totalBreakTime),
+                ToWholeMinutes(totalBreakTime),
             WorkedMinutes:
-                ToWholeMinutes(
-                    totalWorkedTime),
+                ToWholeMinutes(totalWorkedTime),
             HasOpenBreak:
-                state ==
-                CalculationState.OnBreak,
+                state == CalculationState.OnBreak,
             HasOpenSession:
                 state is
                     CalculationState.Working or
@@ -239,7 +211,6 @@ public sealed class AttendanceSessionCalculator
 
     private static void AutoCloseBreakIfRequired(
         DateTimeOffset effectiveTimeUtc,
-        DateTimeOffset? automaticBreakEndUtc,
         ref CalculationState state,
         ref TimeSpan totalBreakTime,
         ref DateTimeOffset? workSegmentStartedAt,
@@ -247,24 +218,28 @@ public sealed class AttendanceSessionCalculator
         ref DateTimeOffset? latestBreakEndedAt)
     {
         if (state != CalculationState.OnBreak ||
-            openBreakStartedAt is null ||
-            !automaticBreakEndUtc.HasValue ||
-            effectiveTimeUtc < automaticBreakEndUtc.Value)
+            openBreakStartedAt is null)
         {
             return;
         }
 
-        var breakEndUtc =
-            automaticBreakEndUtc.Value;
+        var automaticBreakEndUtc =
+            LunchBreakPolicy.GetAutomaticEndUtc(
+                openBreakStartedAt.Value);
+
+        if (effectiveTimeUtc < automaticBreakEndUtc)
+        {
+            return;
+        }
 
         AddDuration(
             ref totalBreakTime,
             openBreakStartedAt.Value,
-            breakEndUtc);
+            automaticBreakEndUtc);
 
-        latestBreakEndedAt = breakEndUtc;
+        latestBreakEndedAt = automaticBreakEndUtc;
         openBreakStartedAt = null;
-        workSegmentStartedAt = breakEndUtc;
+        workSegmentStartedAt = automaticBreakEndUtc;
         state = CalculationState.Working;
     }
 

@@ -35,7 +35,8 @@ public sealed record AttendanceEventResponse(
     decimal? DistanceFromWorkLocationMetres,
     bool? IsInsideGeofence,
     DateTimeOffset CapturedAtUtc,
-    string Message);
+    string Message,
+    string? Notes);
 
 public sealed record CurrentAttendanceStatusResponse(
     Guid EmployeeId,
@@ -72,6 +73,34 @@ public sealed record TodayAttendanceSummaryResponse(
     bool HasOpenBreak,
     bool HasMissingClockOut,
     bool HasInvalidSequence,
-    DateTimeOffset LunchBreakStartsAtUtc,
-    DateTimeOffset LunchBreakEndsAtUtc,
+    int LunchBreakMaximumMinutes,
+    DateTimeOffset? LunchBreakEndsAtUtc,
     bool HasTakenLunchBreak);
+
+public sealed record LunchBreakOverrideRequest(
+    Guid EmployeeId,
+
+    [Required]
+    [RegularExpression(
+        "^(Start|End)$",
+        ErrorMessage = "Action must be Start or End.")]
+    string Action,
+
+    [Required]
+    [StringLength(400, MinimumLength = 3)]
+    string Reason);
+
+public sealed record LunchBreakOverrideResponse(
+    Guid AttendanceEventId,
+    Guid EmployeeId,
+    string EmployeeNumber,
+    string EmployeeName,
+    string DepartmentName,
+    string Action,
+    string Status,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset? LunchBreakEndsAtUtc,
+    int LunchBreakMaximumMinutes,
+    string PerformedByRole,
+    Guid PerformedByUserId,
+    string Reason);

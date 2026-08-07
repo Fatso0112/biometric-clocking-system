@@ -1,4 +1,5 @@
 import {
+  Coffee,
   Plus,
   RefreshCw,
   Search,
@@ -39,6 +40,8 @@ import {
   type DepartmentResponse,
 } from '../../services/departmentsApi';
 import { ApiError } from '../../services/httpClient';
+import { getTodayAttendance } from '../../services/attendanceApi';
+import { overrideLunchBreak } from '../../services/lunchBreakOverrideApi';
 import { Link } from 'react-router-dom';
 
 function getErrorMessage(
@@ -105,6 +108,10 @@ export default function AdminEmployees() {
     setUpdatingUserId,
   ] = useState<string | null>(null);
 
+  const [
+    updatingLunchEmployeeId,
+    setUpdatingLunchEmployeeId,
+  ] = useState<string | null>(null);
 
   const [message, setMessage] = useState<{
     text: string;
@@ -285,6 +292,97 @@ export default function AdminEmployees() {
       });
     } finally {
       setUpdatingUserId(null);
+    }
+  }
+
+  async function handleLunchOverride(
+    employee: AdminEmployeeResponse,
+  ) {
+    if (!accessToken) {
+      setMessage({
+        text: 'Your login session is unavailable. Please log in again.',
+        error: true,
+      });
+      return;
+    }
+
+    setUpdatingLunchEmployeeId(
+      employee.id,
+    );
+    setMessage(null);
+
+    try {
+      const today =
+        await getTodayAttendance(
+          employee.id,
+          accessToken,
+        );
+
+      let action:
+        | 'Start'
+        | 'End';
+
+      if (today.status === 'OnBreak') {
+        action = 'End';
+      } else if (
+        today.status === 'Working' &&
+        !today.hasTakenLunchBreak
+      ) {
+        action = 'Start';
+      } else {
+        setMessage({
+          text: today.hasTakenLunchBreak
+            ? `${employee.fullName}'s lunch break has already been completed today.`
+            : `${employee.fullName} must be actively working before a lunch break can be overridden.`,
+          error: true,
+        });
+        return;
+      }
+
+      const reason =
+        window.prompt(
+          `${action} lunch break for ${employee.fullName}.\n\nEnter the reason for this administrator override:`,
+        )?.trim();
+
+      if (!reason) {
+        return;
+      }
+
+      if (reason.length < 3) {
+        setMessage({
+          text: 'The override reason must contain at least 3 characters.',
+          error: true,
+        });
+        return;
+      }
+
+      const result =
+        await overrideLunchBreak(
+          accessToken,
+          {
+            employeeId:
+              employee.id,
+            action,
+            reason,
+          },
+        );
+
+      setMessage({
+        text:
+          action === 'Start'
+            ? `Lunch break started for ${result.employeeName}. It will end automatically after ${result.lunchBreakMaximumMinutes} minutes unless ended earlier.`
+            : `Lunch break ended for ${result.employeeName}.`,
+        error: false,
+      });
+    } catch (error) {
+      setMessage({
+        text: getErrorMessage(error),
+        error: true,
+      });
+    } finally {
+      setUpdatingLunchEmployeeId(
+        null,
+      );
     }
   }
 
@@ -596,6 +694,28 @@ export default function AdminEmployees() {
                         }
                       >
                         <div className="flex min-w-[150px] flex-col gap-2">
+                          {employee.isActive ? (
+                            <PortalActionButton
+                              tone="secondary"
+                              className="min-h-10 px-3 text-xs"
+                              disabled={
+                                updatingLunchEmployeeId ===
+                                employee.id
+                              }
+                              onClick={() => {
+                                void handleLunchOverride(
+                                  employee,
+                                );
+                              }}
+                            >
+                              <Coffee className="h-4 w-4" />
+                              {updatingLunchEmployeeId ===
+                              employee.id
+                                ? 'Checking lunch…'
+                                : 'Override lunch'}
+                            </PortalActionButton>
+                          ) : null}
+
                           {account ? (
                             <PortalActionButton
                               tone={

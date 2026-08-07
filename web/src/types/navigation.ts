@@ -45,6 +45,8 @@ export interface AttendanceConfirmationSummary {
   status: string;
   workedDurationMinutes: number;
   lunchDurationMinutes: number;
+  timeZoneId: string;
+  lunchBreakEndsAtUtc: string;
 }
 
 export interface AttendanceConfirmationNavigationState {
@@ -220,9 +222,13 @@ export function getAttendanceConfirmationState(
     !('status' in summary) ||
     !('workedDurationMinutes' in summary) ||
     !('lunchDurationMinutes' in summary) ||
+    !('timeZoneId' in summary) ||
+    !('lunchBreakEndsAtUtc' in summary) ||
     typeof summary.status !== 'string' ||
     !isFiniteNumber(summary.workedDurationMinutes) ||
-    !isFiniteNumber(summary.lunchDurationMinutes)
+    !isFiniteNumber(summary.lunchDurationMinutes) ||
+    typeof summary.timeZoneId !== 'string' ||
+    typeof summary.lunchBreakEndsAtUtc !== 'string'
   ) {
     return null;
   }
@@ -241,6 +247,8 @@ export function getAttendanceConfirmationState(
       status: summary.status,
       workedDurationMinutes: summary.workedDurationMinutes,
       lunchDurationMinutes: summary.lunchDurationMinutes,
+      timeZoneId: summary.timeZoneId,
+      lunchBreakEndsAtUtc: summary.lunchBreakEndsAtUtc,
     },
   };
 }

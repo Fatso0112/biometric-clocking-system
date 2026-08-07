@@ -7,7 +7,7 @@ import {
   Timer,
   User,
 } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import Button from '../components/Button';
@@ -17,6 +17,7 @@ import {
   getAttendanceConfirmationState,
   type IntendedClockAction,
 } from '../types/navigation';
+import { formatLunchCountdown } from '../utils/lunchBreakPolicy';
 
 type ConfirmationVariant = IntendedClockAction;
 
@@ -41,7 +42,7 @@ const variantContent = {
   },
   breakStart: {
     heading: 'Break Started!',
-    subtext: 'Your lunch break has started.',
+    subtext: 'Your lunch break has started and will end automatically at 1:00 PM.',
     buttonLabel: 'BACK TO ATTENDANCE',
     circleClassName: 'bg-[#FEF3C7]',
     accentClassName: 'text-[#D97706]',
@@ -70,8 +71,12 @@ function formatDate(date: Date) {
   });
 }
 
-function formatTime(date: Date) {
+function formatTime(
+  date: Date,
+  timeZoneId?: string,
+) {
   return date.toLocaleTimeString('en-ZA', {
+    timeZone: timeZoneId,
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -120,12 +125,57 @@ export default function ConfirmationScreen({
   const logout = useLogout();
   const confirmation = getAttendanceConfirmationState(location.state);
   const content = variantContent[variant];
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     if (!confirmation || confirmation.intendedAction !== variant) {
       navigate('/clock', { replace: true });
     }
   }, [confirmation, navigate, variant]);
+
+  useEffect(() => {
+    if (variant !== 'breakStart') return;
+
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [variant]);
+
+  const lunchEndMs =
+    confirmation?.summary.lunchBreakEndsAtUtc
+      ? new Date(
+          confirmation.summary.lunchBreakEndsAtUtc,
+        ).getTime()
+      : Number.NaN;
+  const lunchRemainingSeconds = Number.isFinite(lunchEndMs)
+    ? Math.max(0, Math.ceil((lunchEndMs - nowMs) / 1000))
+    : 0;
+
+  useEffect(() => {
+    if (
+      !confirmation ||
+      confirmation.intendedAction !== variant ||
+      variant !== 'breakStart' ||
+      !Number.isFinite(lunchEndMs) ||
+      lunchRemainingSeconds > 0
+    ) {
+      return;
+    }
+
+    const redirectTimer = window.setTimeout(() => {
+      navigate('/clock', { replace: true });
+    }, 500);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [
+    confirmation,
+    lunchEndMs,
+    lunchRemainingSeconds,
+    navigate,
+    variant,
+  ]);
 
   if (!confirmation || confirmation.intendedAction !== variant) {
     return null;
@@ -156,6 +206,36 @@ export default function ConfirmationScreen({
         <p className="mt-2 text-sm text-dark-grey">
           {confirmation.event.message || content.subtext}
         </p>
+
+        {variant === 'breakStart' ? (
+          <Card className="mt-7 w-full p-5 text-center">
+            <Coffee
+              className="mx-auto h-7 w-7"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-dark-grey">
+              Lunch break time remaining
+            </p>
+            <p
+              className="mt-2 text-4xl font-bold tabular-nums"
+              aria-live="polite"
+            >
+              {formatLunchCountdown(lunchRemainingSeconds)}
+            </p>
+            <p className="mt-2 text-sm text-dark-grey">
+              Break ends automatically at{' '}
+              {confirmation.summary.lunchBreakEndsAtUtc
+                ? formatTime(
+                    new Date(
+                      confirmation.summary.lunchBreakEndsAtUtc,
+                    ),
+                    confirmation.summary.timeZoneId,
+                  )
+                : 'the one-hour limit'}.
+            </p>
+          </Card>
+        ) : null}
 
         <Card className="mt-7 w-full px-5 py-2 text-left">
           <DetailRow

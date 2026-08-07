@@ -1,5 +1,6 @@
 import type { AttendanceRange } from '../utils/attendanceRanges';
 import { formatDurationMinutes } from '../utils/attendanceDuration';
+import { getAutomaticLunchEndMs } from '../utils/lunchBreakPolicy';
 import { apiRequest } from './httpClient';
 
 export interface AttendanceSummary {
@@ -50,6 +51,9 @@ export interface TodayAttendanceResponse {
   hasOpenBreak: boolean;
   hasMissingClockOut: boolean;
   hasInvalidSequence: boolean;
+  lunchBreakMaximumMinutes: number;
+  lunchBreakEndsAtUtc: string | null;
+  hasTakenLunchBreak: boolean;
 }
 
 export interface LiveAttendanceEventResponse {
@@ -66,6 +70,7 @@ export interface LiveAttendanceEventResponse {
   isInsideGeofence: boolean | null;
   capturedAtUtc: string;
   message: string;
+  notes: string | null;
 }
 
 export interface ClockingLocationEvidence {
@@ -215,40 +220,59 @@ function buildLiveRecord(
     .reverse()
     .find((event) => event.eventType === 'ClockOut');
 
-  let openBreakAt: number | null = null;
+  const breakStart = orderedEvents.find(
+    (event) => event.eventType === 'BreakStart',
+  );
+  const breakEnd = breakStart
+    ? orderedEvents.find(
+        (event) =>
+          event.eventType === 'BreakEnd' &&
+          new Date(event.capturedAtUtc).getTime() >=
+            new Date(breakStart.capturedAtUtc).getTime(),
+      )
+    : undefined;
+
   let breakMinutes = 0;
 
-  for (const event of orderedEvents) {
-    const capturedAt = new Date(
-      event.capturedAtUtc,
+  if (breakStart) {
+    const actualStartMs = new Date(
+      breakStart.capturedAtUtc,
     ).getTime();
 
-    if (
-      event.eventType === 'BreakStart' &&
-      openBreakAt === null
-    ) {
-      openBreakAt = capturedAt;
-      continue;
-    }
-
-    if (
-      event.eventType === 'BreakEnd' &&
-      openBreakAt !== null
-    ) {
-      breakMinutes += Math.max(
-        0,
-        Math.round(
-          (capturedAt - openBreakAt) / 60_000,
-        ),
+    const automaticEndMs =
+      getAutomaticLunchEndMs(
+        breakStart.capturedAtUtc,
       );
-      openBreakAt = null;
-    }
+
+    const actualEndMs = breakEnd
+      ? new Date(
+          breakEnd.capturedAtUtc,
+        ).getTime()
+      : clockOut
+        ? new Date(
+            clockOut.capturedAtUtc,
+          ).getTime()
+        : Date.now();
+
+    const effectiveEndMs =
+      Math.min(
+        actualEndMs,
+        automaticEndMs,
+      );
+
+    breakMinutes = Math.max(
+      0,
+      Math.floor(
+        (effectiveEndMs - actualStartMs) /
+          60_000,
+      ),
+    );
   }
 
   const durationMinutes = clockOut
     ? Math.max(
         0,
-        Math.round(
+        Math.floor(
           (new Date(clockOut.capturedAtUtc).getTime() -
             new Date(clockIn.capturedAtUtc).getTime()) /
             60_000,
