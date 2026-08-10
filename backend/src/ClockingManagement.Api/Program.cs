@@ -1,3 +1,5 @@
+using ClockingManagement.Application.Payroll;
+using ClockingManagement.Infrastructure.Payroll;
 using ClockingManagement.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +57,10 @@ builder.Services.AddSingleton<
 builder.Services.AddSingleton<
     IAttendanceSessionCalculator,
     AttendanceSessionCalculator>();
+
+    builder.Services.AddScoped<
+    IPayrollService,
+    PayrollService>();
 
 var app = builder.Build();
 
